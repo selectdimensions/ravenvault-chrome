@@ -2,3 +2,10 @@
 .idea/
 .vscode/
 tmp/
+
+# Linux app build artifacts
+linux-app/target/
+**/*.rs.bk
+
+# macOS reference app (not source)
+RavenVault-latest.dmg
