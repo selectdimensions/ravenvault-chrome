@@ -7,6 +7,9 @@
 //!
 //! See `docs/PROTOCOL.md` in the repository root for the full wire contract.
 
+pub mod protocol;
+pub mod server;
+
 /// The version this app reports to the extension during the handshake.
 ///
 /// The extension blocks all exports unless this is `>= MIN_APP_VERSION` (0.9.1)

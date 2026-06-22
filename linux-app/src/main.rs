@@ -1,25 +1,38 @@
 //! RavenVault Linux companion app — headless binary entry point.
 //!
-//! For now this just initializes logging and prints a banner; the WebSocket
-//! server is wired in at milestone M1.
+//! Initializes logging and runs the WebSocket server the extension connects to.
 
 use anyhow::Result;
+use ravenvault::server::{self, Dispatcher};
+use ravenvault::WS_BIND_ADDR;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     init_tracing();
     info!(
         version = ravenvault::APP_VERSION,
-        bind = ravenvault::WS_BIND_ADDR,
+        bind = WS_BIND_ADDR,
         "RavenVault Linux companion starting"
     );
     println!(
-        "RavenVault Linux companion v{} (protocol v{})",
+        "RavenVault Linux companion v{} — WebSocket server on ws://{}",
         ravenvault::APP_VERSION,
-        ravenvault::PROTOCOL_VERSION
+        WS_BIND_ADDR
     );
-    println!("WebSocket server target: {}", ravenvault::WS_BIND_ADDR);
+
+    let listener = server::bind(WS_BIND_ADDR).await?;
+    let dispatcher = Dispatcher::new();
+
+    tokio::select! {
+        res = server::serve(listener, dispatcher) => {
+            res?;
+        }
+        _ = tokio::signal::ctrl_c() => {
+            info!("shutdown signal received");
+        }
+    }
     Ok(())
 }
 
