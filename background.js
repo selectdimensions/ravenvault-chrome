@@ -798,6 +798,9 @@ async function pageEnumerateChats() {
         let v;
         try { v = o[k]; } catch (e) { continue; }
         if (typeof v === 'string') {
+          // Primary: the row's link carries href="/chat/<slug>".
+          const m = v.match(/\/chat\/([a-z0-9]+)/);
+          if (m) return m[1];
           const key = k.replace(/_/g, '').toLowerCase();
           if ((key === 'code' || key === 'chatcode' || key === 'urlcode' || key === 'handle' || key === 'slug') && SLUG.test(v)) {
             return v;
