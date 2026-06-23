@@ -20,6 +20,34 @@ capture. The first live export (`Counting Song Values.md`) revealed:
   (golden tests with `insta`) so future Poe DOM changes are caught.
 - [ ] Re-export to verify after each fix.
 
+## Bulk export — "Export All" (planned feature)
+
+Goal: export every Poe conversation hands-off, instead of clicking each chat.
+**Approach chosen: extend the extension + app** to loop over the chat list using
+the user's live, logged-in browser session. **Gated on the M3 conversion fix**
+(don't mass-produce broken notes).
+
+Flow (reuses M2–M4 unchanged):
+1. **Enumerate chats** — read Poe's sidebar/history (`poe.com/chat/...` links),
+   scroll-scraping the list to lazy-load all of them. *Main unknown:* whether
+   the sidebar exposes the full history or only recent — investigate the real
+   DOM / look for a Poe history endpoint. Centralize selectors like M3.
+2. **Per chat**: navigate the tab to the URL → run the existing capture flow →
+   write note → next. Human-paced to avoid anti-automation.
+3. **Resume/idempotent**: vault writer upserts by `uid`, so re-runs skip/update,
+   never duplicate. One chat failing must not abort the batch (collect errors,
+   report a summary).
+4. **Progress UI**: "Exporting 12/137…", cancel button, final summary.
+
+New pieces required:
+- Extension (user's fork): an "Export All" action; a command to enumerate the
+  chat list; a command to navigate the tab to a chat URL.
+- App: a `bulk_export` orchestration wrapping `run_export` in a loop with
+  progress + error aggregation.
+
+Investigation first: capture Poe's sidebar HTML and confirm enumeration is
+reliable before committing to the loop.
+
 ## Metadata
 
 - [ ] Populate `source_url` in the note frontmatter — the extension already logs
