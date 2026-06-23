@@ -862,21 +862,21 @@ async function pageEnumerateChats() {
   collect();
   let lastUrls = seen.size, lastRows = itemsSeen, stable = 0;
   const deadline = Date.now() + 300000; // hard 5-min budget so we always return
-  for (let i = 0; i < 8000 && stable < 10 && Date.now() < deadline; i++) {
+  // The main history list is an append list (rows stay in the DOM), so jump to
+  // the bottom each step to load the next page, and be patient: only stop once
+  // neither rows nor resolved URLs have grown for ~13s.
+  for (let i = 0; i < 8000 && stable < 15 && Date.now() < deadline; i++) {
     const sc = getScroller();
-    const before = sc.scrollTop;
     const trig = document.querySelector(TRIGGER);
     if (trig && trig.scrollIntoView) trig.scrollIntoView({ block: 'end' });
-    sc.scrollTop = before + Math.max(600, (sc.clientHeight || 600) * 0.9);
-    await sleep(700);
+    sc.scrollTop = sc.scrollHeight;
+    await sleep(900);
     collect();
-    const moved = Math.abs(getScroller().scrollTop - before) > 2;
     const grewUrls = seen.size !== lastUrls;
     const grewRows = itemsSeen !== lastRows;
     if (grewUrls) lastUrls = seen.size;
     if (grewRows) lastRows = itemsSeen;
-    // Only count as "done" when neither scrolling nor loading nor resolving made progress.
-    if (!moved && !grewUrls && !grewRows) stable++;
+    if (!grewUrls && !grewRows) stable++;
     else stable = 0;
   }
 

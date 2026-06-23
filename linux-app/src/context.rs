@@ -49,8 +49,12 @@ pub struct AppContext {
     /// Single-session guard: true while an export is running.
     pub busy: Mutex<bool>,
     /// Set to true to request the active export cancel (from the extension's
-    /// abort_export / request_abort).
+    /// request_abort — an explicit user Cancel).
     pub cancel: AtomicBool,
+    /// True while a bulk ("Export All") run is active. Bulk navigates the tab on
+    /// purpose, so the extension's navigation-triggered `abort_export` must be
+    /// ignored during it (only an explicit `request_abort` cancels).
+    pub bulk_active: AtomicBool,
     /// MemPalace (LLM memory) ingest configuration. Ingest is **manual only**
     /// (CLI `ingest` subcommand or the tray menu) — never automatic on export.
     pub mempalace: MemPalaceConfig,
@@ -63,6 +67,7 @@ impl AppContext {
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
             cancel: AtomicBool::new(false),
+            bulk_active: AtomicBool::new(false),
             mempalace: MemPalaceConfig::default(),
         }
     }
@@ -83,6 +88,7 @@ impl AppContext {
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
             cancel: AtomicBool::new(false),
+            bulk_active: AtomicBool::new(false),
             mempalace,
         }
     }
@@ -126,6 +132,7 @@ impl AppContext {
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
             cancel: AtomicBool::new(false),
+            bulk_active: AtomicBool::new(false),
             mempalace: MemPalaceConfig::from_env(),
         }
     }

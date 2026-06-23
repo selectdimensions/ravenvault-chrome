@@ -275,6 +275,9 @@ pub(crate) struct BulkSummary {
 pub async fn run_bulk_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope) {
     let session = Session::from_envelope(invoke);
     ctx.cancel.store(false, Ordering::SeqCst);
+    // Mark bulk active so the extension's navigation-triggered abort_export is
+    // ignored (bulk navigates the tab for every chat on purpose).
+    ctx.bulk_active.store(true, Ordering::SeqCst);
     {
         let mut s = ctx.session.lock().await;
         s.active = true;
@@ -290,6 +293,7 @@ pub async fn run_bulk_export(client: Client, ctx: Arc<AppContext>, invoke: &Enve
     let result = bulk_loop(&client, &ctx, &session, &mut in_rx).await;
     client.clear_session_inbox().await;
 
+    ctx.bulk_active.store(false, Ordering::SeqCst);
     {
         let mut s = ctx.session.lock().await;
         s.active = false;

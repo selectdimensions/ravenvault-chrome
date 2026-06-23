@@ -130,12 +130,19 @@ async fn route(env: Envelope, client: &Client, ctx: &Arc<AppContext>) {
 
     let command = env.command.as_deref().unwrap_or("").to_string();
 
-    // Cancellation from the extension (user clicked Cancel, or a fatal abort):
-    // flag the running export and also forward it to the orchestrator's inbox so
-    // it unblocks any capture/download wait promptly.
-    if matches!(command.as_str(), "abort_export" | "request_abort") {
+    // Explicit user Cancel — always stop the run.
+    if command == "request_abort" {
         ctx.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
         client.forward_to_session(env).await;
+        return;
+    }
+    // Programmatic abort — usually the export tab navigating. A bulk run
+    // navigates the tab on purpose for every chat, so ignore it during bulk;
+    // otherwise forward it to the active single-export capture so it can abort.
+    if command == "abort_export" {
+        if !ctx.bulk_active.load(std::sync::atomic::Ordering::SeqCst) {
+            client.forward_to_session(env).await;
+        }
         return;
     }
 
