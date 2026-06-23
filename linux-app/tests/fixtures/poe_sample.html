@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  SYNTHETIC Poe.com conversation fixture for the M3 html2md converter.
+
+  This is hand-built from the selectors/class-name patterns the extension
+  documents (see docs/PROTOCOL.md §5 and content.js). It is NOT a real Poe
+  capture; the class names mimic Poe's CSS-module hashed naming
+  (e.g. `Message_row__xxxxx`, `ChatMessage_chatMessage__xxxxx`,
+  `Human`/`Bot` side markers) closely enough to exercise the parser.
+
+  TODO(user-validation): replace/supplement with a REAL captured Poe page
+  during validation so the centralized selectors in html2md.rs can be tuned.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Rust async patterns - Poe</title>
+  </head>
+  <body>
+    <div class="ChatMessagesView_container__ab12">
+      <div class="ChatMessagesScrollWrapper_scrollableContainerWrapper__x8H60">
+        <!-- Human message -->
+        <div class="Message_row__Human__c3d4" data-message-id="message-1">
+          <div class="ChatMessage_chatMessage__e5f6">
+            <div class="Message_humanMessageBubble__g7h8">
+              <div class="Markdown_markdownContainer__i9j0">
+                <p>How do I write an <strong>async</strong> function in <em>Rust</em>?</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bot message -->
+        <div class="Message_row__Bot__k1l2" data-message-id="message-2">
+          <div class="ChatMessage_chatMessage__m3n4">
+            <div class="ChatMessage_botMessageBubble__o5p6">
+              <span class="BotHeader_botName__q7r8">Claude-Sonnet</span>
+              <div class="Markdown_markdownContainer__s9t0">
+                <p>Here is how you declare an async function:</p>
+                <pre><code class="language-rust">async fn fetch(url: &amp;str) -&gt; Result&lt;String&gt; {
+    let body = reqwest::get(url).await?.text().await?;
+    Ok(body)
+}</code></pre>
+                <p>A quick comparison of the common runtimes:</p>
+                <table>
+                  <thead>
+                    <tr><th>Runtime</th><th>Notes</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>tokio</td><td>Most popular</td></tr>
+                    <tr><td>async-std</td><td>std-like API</td></tr>
+                  </tbody>
+                </table>
+                <p>Key takeaways:</p>
+                <ul>
+                  <li>Use <code>.await</code> on futures</li>
+                  <li>Pick a runtime:
+                    <ol>
+                      <li>tokio for most apps</li>
+                      <li>async-std as an alternative</li>
+                    </ol>
+                  </li>
+                </ul>
+                <blockquote>Remember: futures are lazy in Rust.</blockquote>
+                <p>See the <a href="https://tokio.rs">tokio site</a> and this diagram:</p>
+                <img src="https://qph.cf2.poecdn.net/main-thumb-async-diagram.png" alt="async diagram" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
