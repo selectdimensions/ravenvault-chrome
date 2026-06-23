@@ -2,14 +2,14 @@
 <!--
   SYNTHETIC Poe.com conversation fixture for the M3 html2md converter.
 
-  This is hand-built from the selectors/class-name patterns the extension
-  documents (see docs/PROTOCOL.md §5 and content.js). It is NOT a real Poe
-  capture; the class names mimic Poe's CSS-module hashed naming
-  (e.g. `Message_row__xxxxx`, `ChatMessage_chatMessage__xxxxx`,
-  `Human`/`Bot` side markers) closely enough to exercise the parser.
-
-  TODO(user-validation): replace/supplement with a REAL captured Poe page
-  during validation so the centralized selectors in html2md.rs can be tuned.
+  Hand-built to exercise rendering paths the trimmed REAL capture
+  (poe_real_sample.html) does NOT cover: tables, blockquotes, nested lists,
+  links, and a `<pre><code>` style code block. The class names now mirror the
+  REAL 2026-06 Poe DOM markers used by html2md.rs:
+    - role HUMAN  -> `ChatMessage_rightSideMessageWrapper__*`
+    - role BOT    -> `BotMessageHeader_wrapper__*` + `BotHeader_textContainer__*`
+    - prose body  -> `Prose_presets_prose__*`
+    - code block  -> `MarkdownCodeBlock_container__*` (with chrome to be stripped)
 -->
 <html lang="en">
   <head>
@@ -20,52 +20,67 @@
     <div class="ChatMessagesView_container__ab12">
       <div class="ChatMessagesScrollWrapper_scrollableContainerWrapper__x8H60">
         <!-- Human message -->
-        <div class="Message_row__Human__c3d4" data-message-id="message-1">
-          <div class="ChatMessage_chatMessage__e5f6">
-            <div class="Message_humanMessageBubble__g7h8">
-              <div class="Markdown_markdownContainer__i9j0">
-                <p>How do I write an <strong>async</strong> function in <em>Rust</em>?</p>
-              </div>
+        <div class="ChatMessage_chatMessage__e5f6">
+          <div class="ChatMessage_rightSideMessageWrapper__c3d4">
+            <div class="Prose_presets_prose__i9j0">
+              <p>How do I write an <strong>async</strong> function in <em>Rust</em>?</p>
             </div>
           </div>
         </div>
 
         <!-- Bot message -->
-        <div class="Message_row__Bot__k1l2" data-message-id="message-2">
-          <div class="ChatMessage_chatMessage__m3n4">
-            <div class="ChatMessage_botMessageBubble__o5p6">
-              <span class="BotHeader_botName__q7r8">Claude-Sonnet</span>
-              <div class="Markdown_markdownContainer__s9t0">
-                <p>Here is how you declare an async function:</p>
-                <pre><code class="language-rust">async fn fetch(url: &amp;str) -&gt; Result&lt;String&gt; {
-    let body = reqwest::get(url).await?.text().await?;
-    Ok(body)
-}</code></pre>
-                <p>A quick comparison of the common runtimes:</p>
-                <table>
-                  <thead>
-                    <tr><th>Runtime</th><th>Notes</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>tokio</td><td>Most popular</td></tr>
-                    <tr><td>async-std</td><td>std-like API</td></tr>
-                  </tbody>
-                </table>
-                <p>Key takeaways:</p>
-                <ul>
-                  <li>Use <code>.await</code> on futures</li>
-                  <li>Pick a runtime:
-                    <ol>
-                      <li>tokio for most apps</li>
-                      <li>async-std as an alternative</li>
-                    </ol>
-                  </li>
-                </ul>
-                <blockquote>Remember: futures are lazy in Rust.</blockquote>
-                <p>See the <a href="https://tokio.rs">tokio site</a> and this diagram:</p>
-                <img src="https://qph.cf2.poecdn.net/main-thumb-async-diagram.png" alt="async diagram" />
+        <div class="ChatMessage_chatMessage__m3n4">
+          <div class="BotMessageHeader_wrapper__o5p6">
+            <div class="BotHeader_title__abc cursor-pointer">
+              <div class="Avatar_root__x"><img src="https://qph.cf2.poecdn.net/avatar.jpeg" /></div>
+              <div class="BotHeader_textContainer__kVf">
+                <p>Claude-Sonnet</p>
+                <p class="BotHeader_subText__sub">Official</p>
               </div>
             </div>
+          </div>
+          <div class="Prose_presets_prose__s9t0">
+            <p>Here is how you declare an async function:</p>
+            <div class="MarkdownCodeBlock_container__rust1">
+              <div class="MarkdownCodeBlock_codeHeaderCodeReferencing__h">
+                <div class="MarkdownCodeBlock_languageName__lang">rust</div>
+              </div>
+              <div class="MarkdownCodeBlock_collapsible__c">
+                <div class="MarkdownCodeBlock_expandButtonContainer__e">
+                  <button class="Button_root__b Button_secondary__s">Expand</button>
+                </div>
+                <pre class="MarkdownCodeBlock_preTag__p"><code class="language-rust"><span class="hljs-keyword">async fn</span> fetch(url: &amp;str) -&gt; Result&lt;String&gt; {
+    <span class="hljs-keyword">let</span> body = reqwest::get(url).await?.text().await?;
+    Ok(body)
+}</code></pre>
+              </div>
+              <div class="MarkdownCodeBlock_codeFooterPoePython__f">
+                <button class="Button_root__b Button_secondary__s">Copy</button>
+              </div>
+            </div>
+            <p>A quick comparison of the common runtimes:</p>
+            <table>
+              <thead>
+                <tr><th>Runtime</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>tokio</td><td>Most popular</td></tr>
+                <tr><td>async-std</td><td>std-like API</td></tr>
+              </tbody>
+            </table>
+            <p>Key takeaways:</p>
+            <ul>
+              <li>Use <code>.await</code> on futures</li>
+              <li>Pick a runtime:
+                <ol>
+                  <li>tokio for most apps</li>
+                  <li>async-std as an alternative</li>
+                </ol>
+              </li>
+            </ul>
+            <blockquote>Remember: futures are lazy in Rust.</blockquote>
+            <p>See the <a href="https://tokio.rs">tokio site</a> and this diagram:</p>
+            <img src="https://qph.cf2.poecdn.net/main-thumb-async-diagram.png" alt="async diagram" />
           </div>
         </div>
       </div>

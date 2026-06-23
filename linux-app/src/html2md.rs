@@ -15,15 +15,17 @@ use scraper::{ElementRef, Html, Node, Selector};
 
 // ---------------------------------------------------------------------------
 // Poe-DOM-dependent selectors. CENTRALIZED here on purpose: Poe ships CSS-module
-// hashed class names (e.g. `ChatMessage_chatMessage__aB3xZ`), so we match on
-// substrings/prefixes. These WILL need tuning against real captured pages —
-// add real-Poe fixtures during user validation and adjust as needed.
-// (Mirrors `content.js:64-71` and PROTOCOL.md §5.)
+// hashed class names (e.g. `ChatMessage_chatMessage__xkgHx`), so we match on
+// substrings/prefixes. These were DERIVED FROM REAL 2026-06 CAPTURES of
+// poe.com conversation pages (see `tests/fixtures/poe_real_sample.html`); they
+// will drift if Poe reships its frontend and must be re-verified against fresh
+// captures. (See PROTOCOL.md §5.)
 // ---------------------------------------------------------------------------
 
 /// Outer wrapper around all chat messages. Used only as a sanity anchor.
 const SEL_MESSAGES_VIEW: &str = r#"[class*="ChatMessagesView"]"#;
-/// Primary per-message block selector (most specific & robust).
+/// Primary per-message block selector. Real class e.g.
+/// `ChatMessage_chatMessage__xkgHx`; ~one per message in document order.
 const SEL_CHAT_MESSAGE: &str = r#"[class*="ChatMessage_chatMessage"]"#;
 /// Fallback message-row selector (one row may wrap one chat message).
 const SEL_MESSAGE_ROW: &str = r#"[class*="Message_row"]"#;
@@ -31,17 +33,33 @@ const SEL_MESSAGE_ROW: &str = r#"[class*="Message_row"]"#;
 const SEL_MESSAGE_ID_ATTR: &str = r#"[data-message-id]"#;
 const SEL_MESSAGE_ID_PREFIX: &str = r#"div[id^="message-"]"#;
 
-/// Inner Markdown/prose container holding the actual rendered message body.
-/// We prefer rendering from here to avoid Poe chrome (avatars, toolbars, etc.).
-const SEL_MARKDOWN_BODY: &str = r#"[class*="Markdown"], [class*="markdown"], [class*="prose"]"#;
+/// ROLE marker (HUMAN): a human message's block contains a descendant/self with
+/// a class containing this substring. Real class e.g.
+/// `ChatMessage_rightSideMessageWrapper__r0roB`.
+const SEL_ROLE_HUMAN: &str = r#"[class*="rightSideMessage"]"#;
+/// ROLE marker (BOT): a bot message's block contains a descendant with a class
+/// containing this substring. Real class e.g. `BotMessageHeader_wrapper__gvvdw`.
+const SEL_ROLE_BOT: &str = r#"[class*="BotMessageHeader"]"#;
 
-/// Substring markers Poe uses to tag the human (user) side of a conversation.
-const HUMAN_MARKERS: &[&str] = &["human", "Human", "userMessage", "UserMessage", "_user"];
-/// Substring markers Poe uses to tag the bot (assistant) side.
-const BOT_MARKERS: &[&str] = &["bot", "Bot", "assistant", "Assistant"];
+/// Inner prose/markdown container holding the actual rendered message body.
+/// Real class e.g. `Prose_presets_prose__0keUd`. We render ONLY from here to
+/// exclude Poe chrome (action bars, buttons, headers, follow-up actions).
+const SEL_PROSE_BODY: &str = r#"[class*="Prose_presets_prose"]"#;
 
-/// Selectors that may carry a bot's display name inside a message block.
-const SEL_BOT_NAME: &str = r#"[class*="botName"], [class*="BotName"], [class*="ChatMessageBotName"], [class*="authorName"]"#;
+/// The text container inside a bot header; its first `<p>` holds the bot's
+/// display name. Real class e.g. `BotHeader_textContainer__kVf_I`. A sibling
+/// `BotHeader_subText` `<p>` (e.g. "Private") must be excluded.
+const SEL_BOT_NAME_CONTAINER: &str = r#"[class*="BotHeader_textContainer"]"#;
+/// Sub-text under a bot name (e.g. "Private"/"Official") — chrome, not the name.
+const SEL_BOT_SUBTEXT: &str = r#"[class*="BotHeader_subText"]"#;
+
+// --- Code-block selectors (real class prefixes from 2026-06 captures) -------
+
+/// A fenced/syntax-highlighted code block container.
+/// Real class e.g. `MarkdownCodeBlock_container__nRn2j`.
+const SEL_CODE_BLOCK: &str = r#"[class*="MarkdownCodeBlock_container"]"#;
+/// The language label inside a code block, e.g. `MarkdownCodeBlock_languageName__…`.
+const SEL_CODE_LANG: &str = r#"[class*="MarkdownCodeBlock_languageName"]"#;
 
 /// Host fragment identifying Poe-hosted assets we should download (M4).
 const ASSET_HOST_MARKER: &str = "poecdn";
@@ -184,46 +202,65 @@ fn dedupe_nested<'a>(els: Vec<ElementRef<'a>>) -> Vec<ElementRef<'a>> {
 // Role + bot name detection
 // ---------------------------------------------------------------------------
 
-/// Detect the role from class names on the message block and its descendants.
-/// Heuristic: scan the message's own classes plus a shallow set of descendant
-/// classes for documented human/bot markers; human wins ties (Poe places the
-/// human bubble distinctly), else default to Bot.
+/// Detect the role of a message block from its real Poe DOM structure.
+///
+/// Rule (verified 58/58 on a real capture): a HUMAN block contains a
+/// descendant/self matching [`SEL_ROLE_HUMAN`] (`rightSideMessage…`); a BOT
+/// block contains a descendant matching [`SEL_ROLE_BOT`] (`BotMessageHeader…`).
+/// Human takes precedence; if neither is present we default to Bot.
 fn detect_role(msg: &ElementRef<'_>) -> Role {
-    let mut blob = String::new();
-    // The message block's own class attribute.
-    if let Some(c) = msg.value().attr("class") {
-        blob.push_str(c);
-        blob.push(' ');
-    }
-    // Descendant class attributes (bubbles are where Poe marks the side).
-    for el in msg.descendants().filter_map(ElementRef::wrap) {
-        if let Some(c) = el.value().attr("class") {
-            blob.push_str(c);
-            blob.push(' ');
-        }
-    }
-
-    let has_human = HUMAN_MARKERS.iter().any(|m| blob.contains(m));
-    let has_bot = BOT_MARKERS.iter().any(|m| blob.contains(m));
-
-    if has_human && !has_bot {
-        Role::Human
-    } else if has_bot && !has_human {
-        Role::Bot
-    } else if has_human {
-        // Both present (e.g. shared container classes): prefer the explicit
-        // human marker on the bubble.
+    // `SEL_ROLE_BOT` is not consulted explicitly: anything without the human
+    // marker is treated as a bot (the documented default), which also covers the
+    // `BotMessageHeader` case.
+    if has_descendant_or_self(msg, SEL_ROLE_HUMAN) {
         Role::Human
     } else {
+        // Bot blocks normally carry `SEL_ROLE_BOT` (`BotMessageHeader`); even
+        // when that marker is absent we default to Bot per the documented rule.
         Role::Bot
     }
 }
 
+/// True if `msg` is a recognized bot block (carries the `BotMessageHeader`
+/// marker, [`SEL_ROLE_BOT`]). A message can be the Bot role by default without
+/// this marker, so this is a stronger "is a real bot header present" check.
+fn is_bot_block(msg: &ElementRef<'_>) -> bool {
+    has_descendant_or_self(msg, SEL_ROLE_BOT)
+}
+
+/// True if `msg` itself or any descendant matches `css`.
+fn has_descendant_or_self(msg: &ElementRef<'_>, css: &str) -> bool {
+    let Ok(sel) = Selector::parse(css) else {
+        return false;
+    };
+    sel.matches(msg) || msg.select(&sel).next().is_some()
+}
+
+/// Extract the bot's display name from `BotHeader_textContainer`'s first `<p>`,
+/// explicitly skipping the `BotHeader_subText` line (e.g. "Private").
 fn extract_bot_name(msg: &ElementRef<'_>) -> Option<String> {
-    let sel = Selector::parse(SEL_BOT_NAME).ok()?;
-    let el = msg.select(&sel).next()?;
-    let name: String = el.text().collect::<String>().trim().to_string();
-    (!name.is_empty()).then_some(name)
+    // Only trust a name when a genuine bot header is present; otherwise the
+    // caller falls back to "Assistant".
+    if !is_bot_block(msg) {
+        return None;
+    }
+    let sel = Selector::parse(SEL_BOT_NAME_CONTAINER).ok()?;
+    let sub_sel = Selector::parse(SEL_BOT_SUBTEXT).ok();
+    let p_sel = Selector::parse(":scope > p").ok()?;
+
+    let container = msg.select(&sel).next()?;
+    for p in container.select(&p_sel) {
+        // Skip the sub-text paragraph if this <p> is (or is inside) one.
+        let is_sub = sub_sel.as_ref().is_some_and(|s| s.matches(&p));
+        if is_sub {
+            continue;
+        }
+        let name: String = p.text().collect::<String>().trim().to_string();
+        if !name.is_empty() {
+            return Some(name);
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -252,10 +289,11 @@ impl AssetCollector {
 // Inner HTML → Markdown rendering
 // ---------------------------------------------------------------------------
 
-/// Render a message block to Markdown. Prefers the inner Markdown/prose
-/// container; falls back to the whole block if none is found.
+/// Render a message block to Markdown from its prose container only, so Poe
+/// chrome (action bars, Copy buttons, headers, follow-up actions) never leaks.
+/// Falls back to the whole block if no prose container is present.
 fn render_message_body(msg: &ElementRef<'_>, assets: &mut AssetCollector) -> String {
-    let root = Selector::parse(SEL_MARKDOWN_BODY)
+    let root = Selector::parse(SEL_PROSE_BODY)
         .ok()
         .and_then(|sel| msg.select(&sel).next())
         .unwrap_or(*msg);
@@ -288,6 +326,14 @@ fn render_children(el: &ElementRef<'_>, out: &mut String, assets: &mut AssetColl
 
 /// Render a single block-level element.
 fn render_block(el: &ElementRef<'_>, out: &mut String, assets: &mut AssetCollector) {
+    // A Poe `MarkdownCodeBlock` container is a `<div>` wrapping the code along
+    // with chrome (language label, Copy/expand buttons, header, footer). Handle
+    // it before generic dispatch so NONE of that chrome can leak into the body.
+    if matches_css(el, SEL_CODE_BLOCK) {
+        render_code_block(el, out);
+        return;
+    }
+
     let name = el.value().name();
     match name {
         "p" => {
@@ -342,8 +388,52 @@ fn render_block(el: &ElementRef<'_>, out: &mut String, assets: &mut AssetCollect
     }
 }
 
-/// Render a `<pre>` (optionally wrapping `<code class="language-xxx">`) as a
-/// fenced code block, preserving the language tag and exact code text.
+/// True if `el`'s own class attribute matches the substring selector `css`.
+fn matches_css(el: &ElementRef<'_>, css: &str) -> bool {
+    Selector::parse(css).map(|s| s.matches(el)).unwrap_or(false)
+}
+
+/// Render a Poe `MarkdownCodeBlock_container` as a fenced code block.
+///
+/// The code text is the concatenated TEXT of the inner `<code>` element (its
+/// `hljs-*` highlight spans contribute only their text). The language comes from
+/// the `MarkdownCodeBlock_languageName` label, falling back to the inner code's
+/// `language-XXX` class. All other descendants (Copy/expand `Button_*`, code
+/// header/footer) are ignored, so their text can never appear in the output.
+fn render_code_block(el: &ElementRef<'_>, out: &mut String) {
+    let code_el = Selector::parse("code")
+        .ok()
+        .and_then(|s| el.select(&s).next());
+
+    let lang = code_block_language(el, code_el.as_ref());
+    let source = match code_el {
+        Some(code) => raw_text(&code),
+        None => String::new(),
+    };
+
+    let code = source.trim_matches('\n');
+    let _ = writeln!(out, "```{lang}");
+    out.push_str(code);
+    out.push('\n');
+    out.push_str("```\n\n");
+}
+
+/// Resolve a code block's language: prefer the `languageName` label, else the
+/// inner `<code class="language-XXX">` class.
+fn code_block_language(container: &ElementRef<'_>, code: Option<&ElementRef<'_>>) -> String {
+    if let Ok(sel) = Selector::parse(SEL_CODE_LANG) {
+        if let Some(label) = container.select(&sel).next() {
+            let name: String = label.text().collect::<String>().trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    code.map(|c| language_of(c)).unwrap_or_default()
+}
+
+/// Render a bare `<pre>` (outside a Poe `MarkdownCodeBlock`, optionally wrapping
+/// `<code class="language-xxx">`) as a fenced block, preserving the exact text.
 fn render_pre(el: &ElementRef<'_>, out: &mut String) {
     let code_sel = Selector::parse("code").ok();
     let code_el = code_sel.as_ref().and_then(|s| el.select(s).next());
@@ -589,11 +679,15 @@ fn normalize_blank_lines(s: &str) -> String {
 mod tests {
     use super::*;
 
-    // NOTE: this is a SYNTHETIC fixture built from documented Poe selectors.
-    // During user validation, add a REAL captured Poe page under
-    // tests/fixtures/ and re-run these assertions so the selectors above can be
-    // tuned to live Poe DOM.
+    // SYNTHETIC fixture (uses the REAL Poe marker classes) for rendering paths
+    // not present in the trimmed real capture: tables, blockquotes, nested
+    // lists, links, `<pre><code>`.
     const SAMPLE: &str = include_str!("../tests/fixtures/poe_sample.html");
+
+    // REAL fixture: a representative slice hand-trimmed from a 2026-06 poe.com
+    // capture (one human + one bot message with a python code block, a list,
+    // and an injected prose image). Ground truth for selectors.
+    const REAL: &str = include_str!("../tests/fixtures/poe_real_sample.html");
 
     fn convert() -> Conversation {
         html_to_markdown(SAMPLE, "fallback")
@@ -628,6 +722,109 @@ mod tests {
         assert!(
             c.markdown.contains("### 🤖 Claude-Sonnet"),
             "expected bot name header, got:\n{}",
+            c.markdown
+        );
+        // The BotHeader_subText line ("Official") must NOT be in the name.
+        assert!(!c.markdown.contains("Claude-Sonnetofficial"));
+        assert!(!c.markdown.contains("### 🤖 Official"));
+    }
+
+    // -----------------------------------------------------------------------
+    // REAL-capture assertions (poe_real_sample.html).
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn real_roles_and_order() {
+        let c = html_to_markdown(REAL, "fallback");
+        let human = c.markdown.find("### 🧑 You").expect("human header");
+        let bot = c
+            .markdown
+            .find("### 🤖 Claude-Sonnet-3.5")
+            .expect("bot header with real name");
+        assert!(human < bot, "human must precede bot\n{}", c.markdown);
+        // Exactly one of each in this two-message slice.
+        assert_eq!(c.markdown.matches("### 🧑 You").count(), 1);
+        assert_eq!(c.markdown.matches("### 🤖").count(), 1);
+        // The bot sub-text ("Private") must not leak into the header.
+        assert!(!c.markdown.contains("### 🤖 Claude-Sonnet-3.5Private"));
+    }
+
+    #[test]
+    fn real_blocks_classify_as_human_then_bot() {
+        let doc = Html::parse_document(REAL);
+        let blocks = find_message_blocks(&doc);
+        assert_eq!(blocks.len(), 2, "expected exactly two message blocks");
+        assert_eq!(detect_role(&blocks[0]), Role::Human);
+        assert_eq!(detect_role(&blocks[1]), Role::Bot);
+        // The first block is NOT a bot block; the second one is.
+        assert!(!is_bot_block(&blocks[0]));
+        assert!(is_bot_block(&blocks[1]));
+    }
+
+    #[test]
+    fn real_code_block_is_fenced_with_language_and_exact_code() {
+        let c = html_to_markdown(REAL, "fallback");
+        assert!(
+            c.markdown.contains("```python"),
+            "fenced python block missing:\n{}",
+            c.markdown
+        );
+        // Exact code text (hljs spans contributed only their text).
+        assert!(
+            c.markdown.contains("def count_vowels(s):"),
+            "exact code missing:\n{}",
+            c.markdown
+        );
+        assert!(c.markdown.contains("    vowels = 'aeiouAEIOU'"));
+        assert!(c.markdown.contains("result = count_vowels(string)"));
+    }
+
+    #[test]
+    fn real_output_has_no_chrome_or_class_noise() {
+        let c = html_to_markdown(REAL, "fallback");
+        for noise in [
+            "hljs",
+            "MarkdownCodeBlock",
+            "Button_",
+            "Prose_presets",
+            "BotMessageHeader",
+            "Copy",
+            "languageName",
+            "rightSideMessage",
+        ] {
+            assert!(
+                !c.markdown.contains(noise),
+                "chrome/class noise {noise:?} leaked into output:\n{}",
+                c.markdown
+            );
+        }
+    }
+
+    #[test]
+    fn real_image_url_is_collected() {
+        let c = html_to_markdown(REAL, "fallback");
+        let url = "https://qph.cf2.poecdn.net/main-thumb-sample-diagram.png";
+        assert!(
+            c.markdown
+                .contains(&format!("![word count diagram]({url})")),
+            "prose image missing:\n{}",
+            c.markdown
+        );
+        assert!(c.asset_urls.contains(&url.to_string()));
+        // The bot-header AVATAR (outside the prose body) must NOT be collected.
+        assert!(
+            !c.asset_urls.iter().any(|u| u.contains("main-thumb-pb")),
+            "avatar leaked into assets: {:?}",
+            c.asset_urls
+        );
+    }
+
+    #[test]
+    fn real_list_renders_in_bot_body() {
+        let c = html_to_markdown(REAL, "fallback");
+        assert!(
+            c.markdown.contains("- "),
+            "expected a bulleted list in the bot body:\n{}",
             c.markdown
         );
     }

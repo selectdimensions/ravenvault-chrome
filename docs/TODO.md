@@ -18,6 +18,12 @@ capture. The first live export (`Counting Song Values.md`) revealed:
   `find_message_blocks` splits per message on the real DOM (not the whole view).
 - [ ] Add real captured-HTML fixtures to `gui`/core tests and snapshot them
   (golden tests with `insta`) so future Poe DOM changes are caught.
+- [x] **Roles fixed** — human = `rightSideMessageWrapper`, bot = `BotMessageHeader`.
+- [x] **Code blocks fixed** — `MarkdownCodeBlock_container` → fenced with language;
+  Copy/header/footer chrome stripped; render only from the `Prose_presets_prose` body.
+- [ ] **Long code blocks are collapsed in Poe's DOM** (`MarkdownCodeBlock_expandButton`)
+  so only the visible portion is captured. The extension should click "expand" on
+  all collapsibles before `capture_start` to get full code.
 - [ ] Re-export to verify after each fix.
 
 ## Bulk export — "Export All" (planned feature)
