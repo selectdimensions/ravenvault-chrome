@@ -19,7 +19,7 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager, WindowEvent,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 /// Return the current on-disk configuration to the settings window.
@@ -70,8 +70,15 @@ fn main() {
             let settings_i = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let open_vault_i =
                 MenuItem::with_id(app, "open_vault", "Open Vault", true, None::<&str>)?;
+            let ingest_i = MenuItem::with_id(
+                app,
+                "ingest",
+                "Ingest vault → MemPalace",
+                true,
+                None::<&str>,
+            )?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&settings_i, &open_vault_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&settings_i, &open_vault_i, &ingest_i, &quit_i])?;
 
             let tray = TrayIconBuilder::with_id("main")
                 .tooltip("RavenVault")
@@ -86,6 +93,30 @@ fn main() {
                     "open_vault" => {
                         if let Some(path) = context::current_file_config().vault_path {
                             let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+                        }
+                    }
+                    "ingest" => {
+                        // Run the (potentially long) mine in the background.
+                        let cfg = context::current_file_config();
+                        if let Some(vault) = cfg.vault_path.filter(|s| !s.is_empty()) {
+                            let mp = ravenvault::mempalace::MemPalaceConfig {
+                                enabled: true,
+                                binary: cfg
+                                    .mempalace_bin
+                                    .filter(|s| !s.is_empty())
+                                    .unwrap_or_else(|| "mempalace".to_string()),
+                                ..Default::default()
+                            };
+                            tauri::async_runtime::spawn(async move {
+                                info!("ingesting vault into MemPalace…");
+                                ravenvault::mempalace::ingest_best_effort(
+                                    &mp,
+                                    std::path::Path::new(&vault),
+                                )
+                                .await;
+                            });
+                        } else {
+                            warn!("no vault configured; open Settings first");
                         }
                     }
                     "quit" => app.exit(0),

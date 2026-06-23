@@ -6,6 +6,7 @@
 //! variables override it. See [`AppContext::load`].
 
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
@@ -47,7 +48,11 @@ pub struct AppContext {
     pub session: Mutex<SessionStatus>,
     /// Single-session guard: true while an export is running.
     pub busy: Mutex<bool>,
-    /// MemPalace (LLM memory) ingest configuration.
+    /// Set to true to request the active export cancel (from the extension's
+    /// abort_export / request_abort).
+    pub cancel: AtomicBool,
+    /// MemPalace (LLM memory) ingest configuration. Ingest is **manual only**
+    /// (CLI `ingest` subcommand or the tray menu) — never automatic on export.
     pub mempalace: MemPalaceConfig,
 }
 
@@ -57,6 +62,7 @@ impl AppContext {
             vault_path,
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
+            cancel: AtomicBool::new(false),
             mempalace: MemPalaceConfig::default(),
         }
     }
@@ -76,6 +82,7 @@ impl AppContext {
             vault_path,
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
+            cancel: AtomicBool::new(false),
             mempalace,
         }
     }
@@ -118,6 +125,7 @@ impl AppContext {
             vault_path: vault,
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
+            cancel: AtomicBool::new(false),
             mempalace: MemPalaceConfig::from_env(),
         }
     }

@@ -34,11 +34,31 @@ systemctl --user restart ravenvault
 ```
 
 - `vault_path` — where notes + `attachments/` are written.
-- `mempalace_enabled` — when `true`, each export is also ingested into your local
-  MemPalace (`mempalace mine … --mode convos`). Best-effort; never blocks a save.
+- `mempalace_bin` — path to the `mempalace` executable used by manual ingest.
 
 Environment variables override the file: `RAVENVAULT_VAULT`,
-`RAVENVAULT_MEMPALACE=1`, `RAVENVAULT_MEMPALACE_BIN`.
+`RAVENVAULT_MEMPALACE_BIN`.
+
+### MemPalace ingest is manual
+
+Exports are **never** auto-ingested into MemPalace (that would re-mine the whole
+vault on every save). Ingest on demand instead:
+
+```bash
+ravenvault ingest            # mine the configured vault into MemPalace
+ravenvault ingest /some/dir  # mine a specific folder
+```
+
+Or use the **tray menu → "Ingest vault → MemPalace"** in the GUI app.
+
+### Debugging an export
+
+Set `RAVENVAULT_DUMP_HTML` to a folder to save the raw captured page HTML of
+each export there (useful for tuning the Markdown conversion):
+
+```bash
+RAVENVAULT_DUMP_HTML=/tmp/rv ravenvault
+```
 
 ## 3. Load the extension
 

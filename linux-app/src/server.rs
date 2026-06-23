@@ -31,7 +31,6 @@ const STREAM_COMMANDS: &[&str] = &[
     "save_file",
     "save_file_complete",
     "save_file_error",
-    "request_abort",
     "reset_timeout",
     "update_tab_status",
 ];
@@ -130,6 +129,15 @@ async fn route(env: Envelope, client: &Client, ctx: &Arc<AppContext>) {
     }
 
     let command = env.command.as_deref().unwrap_or("").to_string();
+
+    // Cancellation from the extension (user clicked Cancel, or a fatal abort):
+    // flag the running export and also forward it to the orchestrator's inbox so
+    // it unblocks any capture/download wait promptly.
+    if matches!(command.as_str(), "abort_export" | "request_abort") {
+        ctx.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        client.forward_to_session(env).await;
+        return;
+    }
 
     // Stream messages belong to the active orchestrator.
     if STREAM_COMMANDS.contains(&command.as_str()) {

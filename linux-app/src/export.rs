@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -73,6 +74,7 @@ pub struct Capture {
 /// clears the busy guard and session-active flag on exit.
 pub async fn run_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope) {
     let session = Session::from_envelope(invoke);
+    ctx.cancel.store(false, Ordering::SeqCst);
     {
         let mut s = ctx.session.lock().await;
         s.active = true;
@@ -155,6 +157,13 @@ async fn do_export(
 
     let capture = collect_capture(&mut inbox).await?;
 
+    // Optional: dump the raw captured HTML for debugging / selector tuning.
+    if let Ok(dir) = std::env::var("RAVENVAULT_DUMP_HTML") {
+        if !dir.is_empty() {
+            dump_html(&dir, &capture);
+        }
+    }
+
     // Convert HTML -> Markdown (M3).
     let convo = html2md::html_to_markdown(&capture.html, &capture.chat_title);
 
@@ -162,6 +171,9 @@ async fn do_export(
     let mut assets: HashMap<String, Vec<u8>> = HashMap::new();
     let total_assets = convo.asset_urls.len();
     for (i, url) in convo.asset_urls.iter().enumerate() {
+        if ctx.cancel.load(Ordering::SeqCst) {
+            return Err(anyhow!("export cancelled"));
+        }
         set_status(
             ctx,
             &format!("Downloading assets… {}/{total_assets}", i + 1),
@@ -180,7 +192,8 @@ async fn do_export(
         .request(scroll_req("stopKeepAlive", session, json!({})), TIMEOUT_CMD)
         .await;
 
-    // Write to the vault (M4), if one is configured.
+    // Write to the vault (M4), if one is configured. MemPalace ingest is NOT
+    // automatic — it's a separate, on-demand action (CLI `ingest` / tray menu).
     let note_path = match &ctx.vault_path {
         Some(root) => {
             set_status(ctx, "Writing to vault…").await;
@@ -192,15 +205,7 @@ async fn do_export(
                 created: None,
             };
             let writer = VaultWriter::new(root.clone());
-            let path = writer.write(note)?;
-
-            // Best-effort: ingest the conversation into MemPalace (never fatal).
-            if ctx.mempalace.enabled {
-                set_status(ctx, "Ingesting into MemPalace…").await;
-                let dir = path.parent().unwrap_or(root.as_path());
-                crate::mempalace::ingest_best_effort(&ctx.mempalace, dir).await;
-            }
-            Some(path)
+            Some(writer.write(note)?)
         }
         None => None,
     };
@@ -211,13 +216,33 @@ async fn do_export(
     })
 }
 
+/// Write the captured HTML to `dir` for offline inspection / selector tuning.
+fn dump_html(dir: &str, capture: &Capture) {
+    let safe = capture.chat_title.replace(['/', '\\'], "_");
+    let name = if safe.trim().is_empty() {
+        "capture".to_string()
+    } else {
+        safe
+    };
+    let path = std::path::Path::new(dir).join(format!("{name}.html"));
+    match std::fs::write(&path, &capture.html) {
+        Ok(()) => info!(path = %path.display(), bytes = capture.html.len(), "dumped captured HTML"),
+        Err(e) => warn!(error = %e, "failed to dump captured HTML"),
+    }
+}
+
 /// Drive the scroll loop until the conversation is scrolled to the top (oldest
 /// message), counting loaded messages for progress.
 async fn scroll_to_top(client: &Client, ctx: &Arc<AppContext>, session: &Session) -> Result<()> {
     let mut last_top = f64::NAN;
     let mut stalls = 0u32;
+    info!("scrolling conversation to load all messages");
 
     for i in 0..MAX_SCROLL_ITERS {
+        if ctx.cancel.load(Ordering::SeqCst) {
+            return Err(anyhow!("export cancelled"));
+        }
+
         let metrics = client
             .request(
                 scroll_req("scrollGetMetrics", session, json!({})),
@@ -227,12 +252,17 @@ async fn scroll_to_top(client: &Client, ctx: &Arc<AppContext>, session: &Session
             .context("scrollGetMetrics failed")?;
 
         if result_bool(&metrics, "atTop") {
-            debug!(iters = i, "reached top of conversation");
+            info!(iters = i, "reached top of conversation");
             break;
         }
 
         let scroll_top = result_f64(&metrics, "scrollTop").unwrap_or(0.0);
         let client_h = result_f64(&metrics, "clientHeight").unwrap_or(800.0);
+
+        // Periodic visibility into a long scroll (info level is otherwise quiet).
+        if i % 20 == 0 {
+            info!(iter = i, scroll_top, "scrolling…");
+        }
 
         // Update progress from the message count (best-effort).
         if let Ok(q) = client
@@ -310,7 +340,9 @@ async fn collect_capture(inbox: &mut mpsc::UnboundedReceiver<Envelope>) -> Resul
                 let args = env.args.clone().unwrap_or(Value::Null);
                 break str_field(&args, "chatTitle").unwrap_or_default();
             }
-            Some("request_abort") => return Err(anyhow!("export cancelled by user")),
+            Some("request_abort") | Some("abort_export") => {
+                return Err(anyhow!("export cancelled by user"))
+            }
             // reset_timeout / update_tab_status are advisory during capture.
             other => debug!(?other, "ignoring stream message during capture"),
         }
