@@ -392,12 +392,15 @@ async function onHostMessage(msg) {
           command: 'enumerateChats', args: {}
         });
         const chatsJson = (res && res.chatsJson) ? res.chatsJson : '[]';
-        let resolved = 0;
-        try { resolved = JSON.parse(chatsJson).length; } catch (e) {}
-        logToHost(`list_chats: resolved ${resolved} chat URLs from ${(res && res.itemsSeen) || '?'} rows`);
         await sendToHost({
           version: '1', request_id: msg.request_id, source: 'extension',
-          type: 'response', command: 'list_chats', result: { chats: chatsJson }
+          type: 'response', command: 'list_chats',
+          result: {
+            chats: chatsJson,
+            itemsSeen: (res && res.itemsSeen) || '0',
+            debug: (res && res.debug) || '',
+            url: (res && res.url) || ''
+          }
         });
       } catch (e) {
         await sendToHost({

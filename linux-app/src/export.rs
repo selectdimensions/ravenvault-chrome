@@ -327,13 +327,21 @@ async fn bulk_loop(
         .context("list_chats failed")?;
     let chats = parse_chats(&resp)?;
     let total = chats.len();
-    let rows_seen = resp
-        .result
-        .as_ref()
-        .and_then(|r| r.get("itemsSeen"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("?");
-    info!(count = total, rows = rows_seen, "enumerated chats");
+    let field = |k: &str| -> String {
+        resp.result
+            .as_ref()
+            .and_then(|r| r.get(k))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let rows_seen = field("itemsSeen");
+    let page_url = field("url");
+    info!(count = total, rows = %rows_seen, url = %page_url, "enumerated chats");
+    if total == 0 {
+        // Self-diagnosis from the extension: where the chat code lives (or not).
+        warn!(rows = %rows_seen, url = %page_url, debug = %field("debug"), "no chat URLs resolved");
+    }
     {
         ctx.session.lock().await.total = total as u64;
     }

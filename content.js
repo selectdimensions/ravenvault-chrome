@@ -287,8 +287,55 @@ async function enumerateChats() {
   }
 
   const list = Array.from(seen, ([url, title]) => ({ url, title }));
-  // Surface how many rows we saw vs URLs we resolved — diagnoses extraction.
-  return { chatsJson: JSON.stringify(list), itemsSeen: String(itemsSeen) };
+  // Self-diagnosis: if rows rendered but no codes resolved, dump the code-like
+  // strings (with their prop paths) from the first row's React fiber so we can
+  // wire the exact field without a manual console snippet.
+  let debug = '';
+  if (list.length === 0 && itemsSeen > 0) debug = rvDebugFirstItem();
+  return {
+    chatsJson: JSON.stringify(list),
+    itemsSeen: String(itemsSeen),
+    debug,
+    url: location.href,
+  };
+}
+
+// Dump code-like strings + their prop paths from the first history row's React
+// fiber (diagnostic for when chat-code extraction returns nothing).
+function rvDebugFirstItem() {
+  const item = document.querySelector(SEL_HISTORY_ITEM);
+  if (!item) return 'no-item';
+  const k = Object.keys(item).find(
+    (k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
+  );
+  if (!k) return 'no-fiber-key';
+  let f = item[k];
+  let d = 0;
+  const hits = [];
+  const visited = new Set();
+  const scan = (o, path, depth) => {
+    if (!o || typeof o !== 'object' || depth > 3 || visited.has(o)) return;
+    visited.add(o);
+    for (const key in o) {
+      let v;
+      try {
+        v = o[key];
+      } catch (e) {
+        continue;
+      }
+      if (typeof v === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(v)) {
+        hits.push(path + '.' + key + '=' + v);
+      } else if (v && typeof v === 'object') {
+        scan(v, path + '.' + key, depth + 1);
+      }
+    }
+  };
+  while (f && d < 25) {
+    if (f.memoizedProps) scan(f.memoizedProps, 'L' + d, 0);
+    f = f.return;
+    d++;
+  }
+  return hits.slice(0, 25).join(' | ') || 'no-code-like-strings';
 }
 
 

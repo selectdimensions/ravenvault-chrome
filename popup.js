@@ -68,13 +68,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Helper to get active tab
     const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    // Strict validation: Only match poe.com/chat/ URLs
+    // Strict validation: Only match poe.com/chat/ URLs (a single conversation).
     const isPoe = (() => {
         if (!currentTab || !currentTab.url) return false;
         try {
             const u = new URL(currentTab.url);
             if (!u.hostname.endsWith('poe.com') && !u.hostname.endsWith('poecdn.net')) return false;
             return u.pathname.startsWith('/chat/');
+        } catch (e) { return false; }
+    })();
+
+    // Any page on the poe.com domain (e.g. the History page poe.com/chats),
+    // used to offer bulk "Export ALL chats".
+    const isPoeDomain = (() => {
+        if (!currentTab || !currentTab.url) return false;
+        try {
+            return new URL(currentTab.url).hostname.endsWith('poe.com');
         } catch (e) { return false; }
     })();
 
@@ -189,7 +198,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         window.close();
                     }
                 });
-            } else if (isPoe) {
+            } else if (isPoeDomain) {
                 // On a Poe page that isn't a single exportable conversation
                 // (e.g. the History page poe.com/chats). Offer bulk export —
                 // it navigates to /chats and walks every conversation itself.
