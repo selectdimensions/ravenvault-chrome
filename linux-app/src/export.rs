@@ -85,11 +85,25 @@ pub async fn run_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope)
         s.total = 0;
     }
 
-    let (in_tx, in_rx) = mpsc::unbounded_channel();
+    let (in_tx, mut in_rx) = mpsc::unbounded_channel();
     client.set_session_inbox(in_tx).await;
-    let result = do_export(&client, &ctx, &session, in_rx).await;
-    client.clear_session_inbox().await;
 
+    // Keep-alive spans the whole capture.
+    let _ = client
+        .request(
+            scroll_req("startKeepAlive", &session, json!({})),
+            TIMEOUT_CMD,
+        )
+        .await;
+    let result = capture_one(&client, &ctx, &session, None, &mut in_rx).await;
+    let _ = client
+        .request(
+            scroll_req("stopKeepAlive", &session, json!({})),
+            TIMEOUT_CMD,
+        )
+        .await;
+
+    client.clear_session_inbox().await;
     {
         let mut s = ctx.session.lock().await;
         s.active = false;
@@ -121,27 +135,22 @@ pub async fn run_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope)
 
 /// What an export produced.
 #[derive(Debug, Clone)]
-struct ExportResult {
+pub(crate) struct ExportResult {
     title: String,
     /// Path of the written note, or `None` if no vault is configured.
     note_path: Option<PathBuf>,
 }
 
-/// The export flow proper: scroll, capture, convert, download assets, write.
-async fn do_export(
+/// Capture → convert → download → write a single conversation on the *current*
+/// tab. Reusable by single export and the bulk loop. Does NOT manage keep-alive;
+/// the caller wraps one or many captures with start/stopKeepAlive.
+pub(crate) async fn capture_one(
     client: &Client,
     ctx: &Arc<AppContext>,
     session: &Session,
-    mut inbox: mpsc::UnboundedReceiver<Envelope>,
+    source_url: Option<String>,
+    inbox: &mut mpsc::UnboundedReceiver<Envelope>,
 ) -> Result<ExportResult> {
-    // Start the service-worker keep-alive so the tab stays live during scrolling.
-    let _ = client
-        .request(
-            scroll_req("startKeepAlive", session, json!({})),
-            TIMEOUT_CMD,
-        )
-        .await;
-
     scroll_to_top(client, ctx, session).await?;
 
     // Stop active scrolling before capture.
@@ -155,7 +164,7 @@ async fn do_export(
         json!({ "session": session.json() }),
     ))?;
 
-    let capture = collect_capture(&mut inbox).await?;
+    let capture = collect_capture(inbox).await?;
 
     // Optional: dump the raw captured HTML for debugging / selector tuning.
     if let Ok(dir) = std::env::var("RAVENVAULT_DUMP_HTML") {
@@ -179,7 +188,7 @@ async fn do_export(
             &format!("Downloading assets… {}/{total_assets}", i + 1),
         )
         .await;
-        match download_asset(client, &mut inbox, url).await {
+        match download_asset(client, inbox, url).await {
             Ok(bytes) => {
                 assets.insert(url.clone(), bytes);
             }
@@ -187,10 +196,6 @@ async fn do_export(
             Err(e) => warn!(%url, error = %e, "asset download failed; skipping"),
         }
     }
-
-    let _ = client
-        .request(scroll_req("stopKeepAlive", session, json!({})), TIMEOUT_CMD)
-        .await;
 
     // Write to the vault (M4), if one is configured. MemPalace ingest is NOT
     // automatic — it's a separate, on-demand action (CLI `ingest` / tray menu).
@@ -201,7 +206,7 @@ async fn do_export(
                 title: convo.title.clone(),
                 markdown: convo.markdown,
                 assets,
-                source_url: None,
+                source_url,
                 created: None,
             };
             let writer = VaultWriter::new(root.clone());
@@ -229,6 +234,183 @@ fn dump_html(dir: &str, capture: &Capture) {
         Ok(()) => info!(path = %path.display(), bytes = capture.html.len(), "dumped captured HTML"),
         Err(e) => warn!(error = %e, "failed to dump captured HTML"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Bulk export ("Export All")
+// ---------------------------------------------------------------------------
+
+/// Max time to enumerate the chat list (the extension scroll-scrapes the sidebar).
+const TIMEOUT_LIST: Duration = Duration::from_secs(180);
+/// Max time for the extension to navigate the tab to a chat and become ready.
+const TIMEOUT_NAV: Duration = Duration::from_secs(45);
+
+/// A chat reference returned by the extension's `list_chats`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ChatRef {
+    pub url: String,
+    #[serde(default)]
+    pub title: String,
+}
+
+/// Tally of a bulk run.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct BulkSummary {
+    pub total: usize,
+    pub exported: usize,
+    pub skipped: usize,
+    pub failed: usize,
+}
+
+/// Entry point for "Export All": enumerate every chat, then capture each one,
+/// skipping chats already in the vault (resume) and tolerating per-chat failures.
+pub async fn run_bulk_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope) {
+    let session = Session::from_envelope(invoke);
+    ctx.cancel.store(false, Ordering::SeqCst);
+    {
+        let mut s = ctx.session.lock().await;
+        s.active = true;
+        s.tab_id = session.tab_id;
+        s.window_id = session.window_id;
+        s.status = "Listing chats…".into();
+        s.current = 0;
+        s.total = 0;
+    }
+
+    let (in_tx, mut in_rx) = mpsc::unbounded_channel();
+    client.set_session_inbox(in_tx).await;
+    let result = bulk_loop(&client, &ctx, &session, &mut in_rx).await;
+    client.clear_session_inbox().await;
+
+    {
+        let mut s = ctx.session.lock().await;
+        s.active = false;
+        s.status = "Idle".into();
+    }
+    *ctx.busy.lock().await = false;
+
+    match result {
+        Ok(sum) => {
+            info!(
+                total = sum.total,
+                exported = sum.exported,
+                skipped = sum.skipped,
+                failed = sum.failed,
+                "bulk export complete"
+            );
+            let msg = format!(
+                "Export All: {} exported, {} skipped, {} failed (of {})",
+                sum.exported, sum.skipped, sum.failed, sum.total
+            );
+            let _ = client.send(update_ui(&session, "success", &msg));
+        }
+        Err(e) => {
+            warn!(error = %e, "bulk export failed");
+            let _ = client.send(abort_export(&session, &e.to_string()));
+        }
+    }
+}
+
+async fn bulk_loop(
+    client: &Client,
+    ctx: &Arc<AppContext>,
+    session: &Session,
+    inbox: &mut mpsc::UnboundedReceiver<Envelope>,
+) -> Result<BulkSummary> {
+    set_status(ctx, "Listing chats…").await;
+    let resp = client
+        .request(
+            Envelope::request("list_chats", json!({ "session": session.json() })),
+            TIMEOUT_LIST,
+        )
+        .await
+        .context("list_chats failed")?;
+    let chats = parse_chats(&resp)?;
+    let total = chats.len();
+    info!(count = total, "enumerated chats");
+    {
+        ctx.session.lock().await.total = total as u64;
+    }
+    if total == 0 {
+        return Ok(BulkSummary::default());
+    }
+
+    // Resume: skip chats whose note (by URL-derived uid) is already in the vault.
+    let existing = ctx
+        .vault_path
+        .as_ref()
+        .map(|r| VaultWriter::new(r.clone()).existing_uids())
+        .unwrap_or_default();
+
+    // One keep-alive spans the whole batch.
+    let _ = client
+        .request(
+            scroll_req("startKeepAlive", session, json!({})),
+            TIMEOUT_CMD,
+        )
+        .await;
+
+    let mut sum = BulkSummary {
+        total,
+        ..Default::default()
+    };
+    for (i, chat) in chats.iter().enumerate() {
+        if ctx.cancel.load(Ordering::SeqCst) {
+            info!("bulk export cancelled by user");
+            break;
+        }
+        {
+            let mut s = ctx.session.lock().await;
+            s.current = (i + 1) as u64;
+            s.status = format!("Exporting {}/{}", i + 1, total);
+        }
+
+        let uid = crate::vault::uid_for(Some(&chat.url), &chat.title);
+        if existing.contains(&uid) {
+            sum.skipped += 1;
+            continue;
+        }
+
+        info!(n = i + 1, total, url = %chat.url, "bulk: navigating");
+        if let Err(e) = client
+            .request(
+                Envelope::request(
+                    "navigate",
+                    json!({ "session": session.json(), "url": chat.url }),
+                ),
+                TIMEOUT_NAV,
+            )
+            .await
+        {
+            warn!(url = %chat.url, error = %e, "navigate failed; skipping chat");
+            sum.failed += 1;
+            continue;
+        }
+
+        match capture_one(client, ctx, session, Some(chat.url.clone()), inbox).await {
+            Ok(_) => sum.exported += 1,
+            Err(e) => {
+                warn!(url = %chat.url, error = %e, "chat export failed; continuing");
+                sum.failed += 1;
+            }
+        }
+    }
+
+    let _ = client
+        .request(scroll_req("stopKeepAlive", session, json!({})), TIMEOUT_CMD)
+        .await;
+    Ok(sum)
+}
+
+/// Parse the `chats` JSON-string field from a `list_chats` response.
+fn parse_chats(resp: &Envelope) -> Result<Vec<ChatRef>> {
+    let raw = resp
+        .result
+        .as_ref()
+        .and_then(|r| r.get("chats"))
+        .and_then(|c| c.as_str())
+        .ok_or_else(|| anyhow!("list_chats response missing `chats` string field"))?;
+    serde_json::from_str(raw).context("parsing chats JSON")
 }
 
 /// Drive the scroll loop until the conversation is scrolled to the top (oldest

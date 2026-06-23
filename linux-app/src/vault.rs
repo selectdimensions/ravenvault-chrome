@@ -70,6 +70,23 @@ impl VaultWriter {
         }
     }
 
+    /// Scan the vault root for the `uid`s of notes already written (top-level
+    /// `*.md` only). Used by bulk export to skip chats already exported.
+    pub fn existing_uids(&self) -> std::collections::HashSet<String> {
+        let mut set = std::collections::HashSet::new();
+        if let Ok(rd) = std::fs::read_dir(&self.root) {
+            for entry in rd.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                    if let Ok(Some(uid)) = read_uid(&path) {
+                        set.insert(uid);
+                    }
+                }
+            }
+        }
+        set
+    }
+
     /// Override the attachments subfolder name (relative to the vault root).
     pub fn with_attachments_dir(mut self, dir: &str) -> Self {
         self.attachments_dir = dir.to_string();
@@ -170,11 +187,14 @@ impl VaultWriter {
 
 /// Stable note id: sha256 prefix of the source URL if present, else of the title.
 fn compute_uid(note: &ExportNote) -> String {
-    let seed = note
-        .source_url
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .unwrap_or(&note.title);
+    uid_for(note.source_url.as_deref(), &note.title)
+}
+
+/// Public, note-free variant of [`compute_uid`]: the stable id for a given source
+/// URL (preferred) or title. Lets callers (e.g. bulk export) check whether a chat
+/// is already exported — by URL alone — without building a full note.
+pub fn uid_for(source_url: Option<&str>, title: &str) -> String {
+    let seed = source_url.filter(|s| !s.is_empty()).unwrap_or(title);
     hex_prefix(seed.as_bytes(), UID_LEN)
 }
 

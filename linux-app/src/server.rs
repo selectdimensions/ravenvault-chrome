@@ -174,7 +174,8 @@ async fn route(env: Envelope, client: &Client, ctx: &Arc<AppContext>) {
         "get_session_status" => {
             let _ = client.send(session_status_reply(ctx, env.request_id.clone()).await);
         }
-        "invoke_export" => spawn_export(client, ctx, env).await,
+        "invoke_export" => spawn_export(client, ctx, env, false).await,
+        "invoke_bulk_export" => spawn_export(client, ctx, env, true).await,
         other => warn!(command = other, msg_type = %env.msg_type, "unhandled message"),
     }
 }
@@ -213,12 +214,12 @@ async fn session_status_reply(ctx: &Arc<AppContext>, request_id: Option<String>)
     )
 }
 
-/// Begin an export if none is running (single-session model).
-async fn spawn_export(client: &Client, ctx: &Arc<AppContext>, invoke: Envelope) {
+/// Begin an export (single or bulk) if none is running (single-session model).
+async fn spawn_export(client: &Client, ctx: &Arc<AppContext>, invoke: Envelope, bulk: bool) {
     {
         let mut busy = ctx.busy.lock().await;
         if *busy {
-            warn!("invoke_export while another export is active; ignoring");
+            warn!("export requested while another is active; ignoring");
             return;
         }
         *busy = true;
@@ -226,7 +227,11 @@ async fn spawn_export(client: &Client, ctx: &Arc<AppContext>, invoke: Envelope) 
     let client = client.clone();
     let ctx = ctx.clone();
     tokio::spawn(async move {
-        export::run_export(client, ctx, &invoke).await;
+        if bulk {
+            export::run_bulk_export(client, ctx, &invoke).await;
+        } else {
+            export::run_export(client, ctx, &invoke).await;
+        }
     });
 }
 
