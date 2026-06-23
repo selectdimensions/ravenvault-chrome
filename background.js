@@ -759,8 +759,24 @@ async function pageEnumerateChats() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ITEM = '[class*="ChatHistoryListItem_wrapper"]';
   const TITLE = '[class*="ChatHistoryListItem_title"]';
-  const SCROLLER = '[class*="InfiniteScroll_container"]';
   const TRIGGER = '[class*="InfiniteScroll_pagingTrigger"]';
+
+  // The MAIN history list (NOT the left sidebar / chat switcher, which also uses
+  // ChatHistoryListItem and only holds ~recent chats).
+  const mainContainer = () => {
+    const secs = document.querySelectorAll('[class*="ChatHistoryPagedList_mainSection"]');
+    if (secs.length) return secs[secs.length - 1];
+    let best = null, bestN = -1;
+    document.querySelectorAll('[class*="InfiniteScroll_container"]').forEach((c) => {
+      const n = c.querySelectorAll(ITEM).length;
+      if (n > bestN) { bestN = n; best = c; }
+    });
+    return best;
+  };
+  const items = () => {
+    const c = mainContainer();
+    return c ? c.querySelectorAll(ITEM) : document.querySelectorAll(ITEM);
+  };
 
   const fiberOf = (el) => {
     const k = Object.keys(el).find(
@@ -768,39 +784,46 @@ async function pageEnumerateChats() {
     );
     return k ? el[k] : null;
   };
-  // SAFE props scan: cycle-guarded, depth-bounded, and skips DOM nodes + React
-  // elements (which are huge/circular and caused a hang). Returns a chat code
-  // found under a chat-code-ish key, else null.
-  const findCode = (props) => {
+  // The URL slug is lowercase alphanumeric (e.g. 3g3zhkrgfvs92ggw736). The chat
+  // object's `id` is an UPPERCASE base64 Relay GID (Chat:NNN) — must NOT be used.
+  const SLUG = /^[a-z0-9]{12,30}$/;
+  const isHashLen = (s) => s.length === 32 || s.length === 40 || s.length === 64;
+  const findSlug = (props) => {
     const seen = new Set();
-    const walk = (o, depth) => {
-      if (!o || typeof o !== 'object' || depth > 3 || seen.has(o)) return null;
-      if (o.nodeType || o.$$typeof) return null; // DOM node / React element
+    const walk = (o, depth, inChat) => {
+      if (!o || typeof o !== 'object' || depth > 5 || seen.has(o)) return null;
+      if (o.nodeType || o.$$typeof) return null;
       seen.add(o);
       for (const k in o) {
         let v;
         try { v = o[k]; } catch (e) { continue; }
         if (typeof v === 'string') {
-          if (/^[A-Za-z0-9_-]{8,}$/.test(v)) {
-            const key = k.replace(/_/g, '').toLowerCase();
-            if (key === 'chatcode' || key === 'chatid' || key === 'conversationid' || key === 'code') {
-              return v;
-            }
+          const key = k.replace(/_/g, '').toLowerCase();
+          if ((key === 'code' || key === 'chatcode' || key === 'urlcode' || key === 'handle' || key === 'slug') && SLUG.test(v)) {
+            return v;
           }
-        } else if (v && typeof v === 'object') {
-          const r = walk(v, depth + 1);
+          if (inChat && SLUG.test(v) && !isHashLen(v) && key !== 'id' && !key.includes('hash') && !key.includes('title')) {
+            return v;
+          }
+        }
+      }
+      for (const k in o) {
+        let v;
+        try { v = o[k]; } catch (e) { continue; }
+        if (v && typeof v === 'object') {
+          const r = walk(v, depth + 1, inChat || k.toLowerCase() === 'chat');
           if (r) return r;
         }
       }
       return null;
     };
-    return walk(props, 0);
+    return walk(props, 0, false);
   };
-  const codeOf = (item) => {
+  const slugOf = (item) => {
     let f = fiberOf(item), d = 0;
     while (f && d < 40) {
-      const c = findCode(f.memoizedProps);
-      if (c) return c;
+      const s = findSlug(f.memoizedProps);
+      if (s) return s;
       f = f.return;
       d++;
     }
@@ -808,67 +831,76 @@ async function pageEnumerateChats() {
   };
 
   const seen = new Map();
+  const attempted = new WeakSet(); // avoid O(n^2) re-scans of the same row
   let itemsSeen = 0;
   const collect = () => {
-    const items = document.querySelectorAll(ITEM);
-    itemsSeen = Math.max(itemsSeen, items.length);
-    items.forEach((item) => {
+    const list = items();
+    itemsSeen = Math.max(itemsSeen, list.length);
+    list.forEach((item) => {
+      if (attempted.has(item)) return;
+      attempted.add(item);
       const t = item.querySelector(TITLE);
       const title = t ? t.textContent.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
-      const code = codeOf(item);
-      if (!code) return;
-      const url = 'https://poe.com/chat/' + code;
+      const slug = slugOf(item);
+      if (!slug) return;
+      const url = 'https://poe.com/chat/' + slug;
       if (!seen.has(url) || (!seen.get(url) && title)) seen.set(url, title);
     });
   };
   const getScroller = () => {
-    const c = document.querySelector(SCROLLER);
+    const ms = document.querySelector('[class*="MainColumn_scrollSection"]');
+    if (ms && ms.scrollHeight > ms.clientHeight + 20) return ms;
+    const c = mainContainer();
     if (c && c.scrollHeight > c.clientHeight + 20) return c;
     return document.scrollingElement || document.documentElement;
   };
 
-  for (let w = 0; w < 30 && document.querySelectorAll(ITEM).length === 0; w++) await sleep(500);
+  for (let w = 0; w < 30 && items().length === 0; w++) await sleep(500);
   collect();
-  let last = seen.size, stable = 0;
-  const deadline = Date.now() + 240000; // hard 4-min budget so we always return
-  for (let i = 0; i < 6000 && stable < 8 && Date.now() < deadline; i++) {
+  let lastUrls = seen.size, lastRows = itemsSeen, stable = 0;
+  const deadline = Date.now() + 300000; // hard 5-min budget so we always return
+  for (let i = 0; i < 8000 && stable < 10 && Date.now() < deadline; i++) {
     const sc = getScroller();
     const before = sc.scrollTop;
     const trig = document.querySelector(TRIGGER);
     if (trig && trig.scrollIntoView) trig.scrollIntoView({ block: 'end' });
-    sc.scrollTop = before + Math.max(400, (sc.clientHeight || 600) * 0.9);
-    window.scrollBy(0, 800);
-    await sleep(800);
+    sc.scrollTop = before + Math.max(600, (sc.clientHeight || 600) * 0.9);
+    await sleep(700);
     collect();
     const moved = Math.abs(getScroller().scrollTop - before) > 2;
-    const grew = seen.size !== last;
-    if (grew) last = seen.size;
-    if (!moved && !grew) stable++;
+    const grewUrls = seen.size !== lastUrls;
+    const grewRows = itemsSeen !== lastRows;
+    if (grewUrls) lastUrls = seen.size;
+    if (grewRows) lastRows = itemsSeen;
+    // Only count as "done" when neither scrolling nor loading nor resolving made progress.
+    if (!moved && !grewUrls && !grewRows) stable++;
     else stable = 0;
   }
 
+  // Diagnostic: if rows rendered but no slug resolved, dump the first MAIN row's
+  // string props so we can see the exact slug field name.
   let sample = '';
   if (seen.size === 0 && itemsSeen > 0) {
-    const item = document.querySelector(ITEM);
+    const item = items()[0];
     const f0 = item ? fiberOf(item) : null;
     if (!f0) {
       sample = 'no-fiber-key-in-main-world';
     } else {
       const hits = [], vis = new Set();
       const scan = (o, path, depth) => {
-        if (!o || typeof o !== 'object' || depth > 3 || vis.has(o)) return;
+        if (!o || typeof o !== 'object' || depth > 4 || vis.has(o)) return;
         if (o.nodeType || o.$$typeof) return;
         vis.add(o);
         for (const k in o) {
           let v;
           try { v = o[k]; } catch (e) { continue; }
-          if (typeof v === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(v)) hits.push(path + '.' + k + '=' + v);
+          if (typeof v === 'string' && v.length >= 4 && v.length <= 40) hits.push(path + '.' + k + '=' + v);
           else if (v && typeof v === 'object') scan(v, path + '.' + k, depth + 1);
         }
       };
       let f = f0, d = 0;
-      while (f && d < 25) { if (f.memoizedProps) scan(f.memoizedProps, 'L' + d, 0); f = f.return; d++; }
-      sample = hits.slice(0, 30).join(' | ') || 'no-code-like-strings';
+      while (f && d < 20) { if (f.memoizedProps) scan(f.memoizedProps, 'L' + d, 0); f = f.return; d++; }
+      sample = hits.slice(0, 60).join(' | ') || 'no-strings';
     }
   }
 
