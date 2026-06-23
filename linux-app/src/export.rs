@@ -192,7 +192,15 @@ async fn do_export(
                 created: None,
             };
             let writer = VaultWriter::new(root.clone());
-            Some(writer.write(note)?)
+            let path = writer.write(note)?;
+
+            // Best-effort: ingest the conversation into MemPalace (never fatal).
+            if ctx.mempalace.enabled {
+                set_status(ctx, "Ingesting into MemPalace…").await;
+                let dir = path.parent().unwrap_or(root.as_path());
+                crate::mempalace::ingest_best_effort(&ctx.mempalace, dir).await;
+            }
+            Some(path)
         }
         None => None,
     };

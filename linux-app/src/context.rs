@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use tokio::sync::Mutex;
 
+use crate::mempalace::MemPalaceConfig;
+
 /// Live status of an export, surfaced to the extension via `get_session_status`.
 /// Mirrors the string-typed fields the extension expects.
 #[derive(Debug, Default, Clone)]
@@ -27,6 +29,8 @@ pub struct AppContext {
     pub session: Mutex<SessionStatus>,
     /// Single-session guard: true while an export is running.
     pub busy: Mutex<bool>,
+    /// MemPalace (LLM memory) ingest configuration.
+    pub mempalace: MemPalaceConfig,
 }
 
 impl AppContext {
@@ -35,15 +39,22 @@ impl AppContext {
             vault_path,
             session: Mutex::new(SessionStatus::default()),
             busy: Mutex::new(false),
+            mempalace: MemPalaceConfig::default(),
         }
     }
 
-    /// Build context from the environment. `RAVENVAULT_VAULT` sets the vault path.
+    /// Build context from the environment. `RAVENVAULT_VAULT` sets the vault path;
+    /// `RAVENVAULT_MEMPALACE` enables MemPalace ingest.
     pub fn from_env() -> Self {
         let vault = std::env::var("RAVENVAULT_VAULT")
             .ok()
             .filter(|s| !s.is_empty())
             .map(PathBuf::from);
-        AppContext::new(vault)
+        AppContext {
+            vault_path: vault,
+            session: Mutex::new(SessionStatus::default()),
+            busy: Mutex::new(false),
+            mempalace: MemPalaceConfig::from_env(),
+        }
     }
 }
