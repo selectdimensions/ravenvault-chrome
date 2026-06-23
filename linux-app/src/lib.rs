@@ -13,6 +13,7 @@ pub mod export;
 pub mod html2md;
 pub mod protocol;
 pub mod server;
+pub mod vault;
 
 /// The version this app reports to the extension during the handshake.
 ///
