@@ -189,8 +189,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                         window.close();
                     }
                 });
+            } else if (isPoe) {
+                // On a Poe page that isn't a single exportable conversation
+                // (e.g. the History page poe.com/chats). Offer bulk export —
+                // it navigates to /chats and walks every conversation itself.
+                updateUI({
+                    title: 'Export all chats',
+                    status: 'Export your entire Poe history to your vault.',
+                    icon: 'neutral',
+                    primary: 'Export ALL chats',
+                    primaryAction: () => {
+                        chrome.runtime.sendMessage({ type: 'START_BULK_EXPORT', tabId: currentTab.id, windowId: currentTab.windowId, url: currentTab.url });
+                        window.close();
+                    },
+                    secondary: UI_CONSTANTS.POPUP.BUTTONS.DISMISS,
+                    secondaryAction: () => window.close()
+                });
             } else {
-                // Error (No active tab) or Invalid Page
+                // Not a Poe page at all.
                 updateUI({
                     title: UI_CONSTANTS.POPUP.TITLE.NO_ACTIVE_TAB,
                     status: UI_CONSTANTS.POPUP.STATUS.NO_ACTIVE_TAB_HINT,

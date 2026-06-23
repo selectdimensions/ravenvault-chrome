@@ -327,7 +327,13 @@ async fn bulk_loop(
         .context("list_chats failed")?;
     let chats = parse_chats(&resp)?;
     let total = chats.len();
-    info!(count = total, "enumerated chats");
+    let rows_seen = resp
+        .result
+        .as_ref()
+        .and_then(|r| r.get("itemsSeen"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    info!(count = total, rows = rows_seen, "enumerated chats");
     {
         ctx.session.lock().await.total = total as u64;
     }

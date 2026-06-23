@@ -190,14 +190,12 @@ function rvReactFiber(el) {
   return k ? el[k] : null;
 }
 
-// Look for a chat-code-like string in a props object (shallow, bounded).
+// Look for a chat-code-like string in a props object (bounded recursion).
+// Matches by KEY NAME pattern (chatCode/chatId/conversationId/code/…) with a
+// value that looks like a Poe chat code (>=8 url-safe chars), rather than a
+// fixed field list — more robust to Poe's prop shape.
 function rvFindChatCode(obj, depth) {
-  if (!obj || typeof obj !== 'object' || depth > 4) return null;
-  const fields = ['chatCode', 'chat_code', 'chatId', 'conversationId', 'conversation_id', 'code'];
-  for (const f of fields) {
-    const v = obj[f];
-    if (typeof v === 'string' && /^[A-Za-z0-9_-]{6,}$/.test(v)) return v;
-  }
+  if (!obj || typeof obj !== 'object' || depth > 5) return null;
   for (const k in obj) {
     let v;
     try {
@@ -205,7 +203,10 @@ function rvFindChatCode(obj, depth) {
     } catch (e) {
       continue;
     }
-    if (v && typeof v === 'object') {
+    if (typeof v === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(v)) {
+      const key = k.replace(/_/g, '').toLowerCase();
+      if (/(chatcode|chatid|conversationid|^code$|^chatcode$)/.test(key)) return v;
+    } else if (v && typeof v === 'object') {
       const r = rvFindChatCode(v, depth + 1);
       if (r) return r;
     }
@@ -255,10 +256,17 @@ async function enumerateChats() {
     return findScrollContainer() || document.scrollingElement || document.documentElement;
   };
 
+  // Wait for the history list to render before scrolling (the page may still be
+  // hydrating right after navigation) — up to ~15s.
+  for (let w = 0; w < 30; w++) {
+    if (document.querySelectorAll(SEL_HISTORY_ITEM).length > 0) break;
+    await rvSleep(500);
+  }
+
   collect();
   let lastCount = seen.size;
   let stable = 0;
-  for (let i = 0; i < 4000 && stable < 8; i++) {
+  for (let i = 0; i < 4000 && stable < 6; i++) {
     const sc = getScroller();
     const before = sc.scrollTop;
     // Pull the paging sentinel into view to trigger loading the next page.
@@ -268,7 +276,7 @@ async function enumerateChats() {
     if (sc === document.scrollingElement || sc === document.documentElement) {
       window.scrollBy(0, 800);
     }
-    await rvSleep(500); // let the next page render / lazy-load
+    await rvSleep(1000); // give the next page time to fetch + render
 
     collect();
     const moved = Math.abs(getScroller().scrollTop - before) > 2;
