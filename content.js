@@ -157,7 +157,130 @@ async function handle(req) {
       return { ok: 'false', error: 'TITLE_FETCH_ERROR' };
     }
   }
+  if (req && req.command === 'enumerateChats') {
+    return enumerateChats();
+  }
   return { ok: 'false' }
+}
+
+function rvSleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// Enumerate every conversation on the chats history page (https://poe.com/chats).
+//
+// IMPORTANT: Poe's history rows are NOT links — each row is
+//   <li class="...ChatHistoryListItem_wrapper..."><div role="link">...</div></li>
+// with no href; the chat's code lives in React's internal props. So we (1) scroll
+// the infinite-scroll list to load every row (nudging the InfiniteScroll paging
+// trigger), collecting as we go because rows recycle, and (2) derive each chat's
+// URL from the row's React fiber props (with an <a href="/chat/..."> fallback).
+// Returns { chatsJson: "[{url,title},...]" }.
+//
+// Poe-DOM-dependent (2026-06 capture) — tune selectors/field names here if Poe
+// changes. If this finds 0 chats, the React-props extraction failed and we
+// should fall back to click-to-navigate (see docs/TODO.md).
+const SEL_HISTORY_ITEM = '[class*="ChatHistoryListItem_wrapper"]';
+const SEL_HISTORY_TITLE = '[class*="ChatHistoryListItem_title"]';
+const SEL_HISTORY_SCROLLER = '[class*="InfiniteScroll_container"]';
+const SEL_HISTORY_TRIGGER = '[class*="InfiniteScroll_pagingTrigger"]';
+
+function rvReactFiber(el) {
+  const k = Object.keys(el).find(
+    (k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
+  );
+  return k ? el[k] : null;
+}
+
+// Look for a chat-code-like string in a props object (shallow, bounded).
+function rvFindChatCode(obj, depth) {
+  if (!obj || typeof obj !== 'object' || depth > 4) return null;
+  const fields = ['chatCode', 'chat_code', 'chatId', 'conversationId', 'conversation_id', 'code'];
+  for (const f of fields) {
+    const v = obj[f];
+    if (typeof v === 'string' && /^[A-Za-z0-9_-]{6,}$/.test(v)) return v;
+  }
+  for (const k in obj) {
+    let v;
+    try {
+      v = obj[k];
+    } catch (e) {
+      continue;
+    }
+    if (v && typeof v === 'object') {
+      const r = rvFindChatCode(v, depth + 1);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+function rvChatCodeOf(item) {
+  // Fallback: a real anchor, if Poe ever renders one.
+  const a = item.querySelector('a[href*="/chat/"]');
+  if (a) {
+    const m = (a.getAttribute('href') || '').match(/\/chat\/([A-Za-z0-9_-]+)/);
+    if (m) return m[1];
+  }
+  // Primary: walk the row's React fiber chain for the chat code.
+  let fiber = rvReactFiber(item);
+  let depth = 0;
+  while (fiber && depth < 40) {
+    const code = rvFindChatCode(fiber.memoizedProps, 0);
+    if (code) return code;
+    fiber = fiber.return;
+    depth++;
+  }
+  return null;
+}
+
+async function enumerateChats() {
+  const seen = new Map(); // url -> title
+  let itemsSeen = 0;
+
+  const collect = () => {
+    const items = document.querySelectorAll(SEL_HISTORY_ITEM);
+    itemsSeen = Math.max(itemsSeen, items.length);
+    items.forEach((item) => {
+      const titleEl = item.querySelector(SEL_HISTORY_TITLE);
+      const title = titleEl ? titleEl.textContent.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+      const code = rvChatCodeOf(item);
+      if (!code) return;
+      const url = 'https://poe.com/chat/' + code;
+      if (!seen.has(url) || (!seen.get(url) && title)) seen.set(url, title);
+    });
+  };
+
+  const getScroller = () => {
+    const c = document.querySelector(SEL_HISTORY_SCROLLER);
+    if (c && c.scrollHeight > c.clientHeight + 20) return c;
+    return findScrollContainer() || document.scrollingElement || document.documentElement;
+  };
+
+  collect();
+  let lastCount = seen.size;
+  let stable = 0;
+  for (let i = 0; i < 4000 && stable < 8; i++) {
+    const sc = getScroller();
+    const before = sc.scrollTop;
+    // Pull the paging sentinel into view to trigger loading the next page.
+    const trig = document.querySelector(SEL_HISTORY_TRIGGER);
+    if (trig && trig.scrollIntoView) trig.scrollIntoView({ block: 'end' });
+    sc.scrollTop = before + Math.max(400, (sc.clientHeight || 600) * 0.9);
+    if (sc === document.scrollingElement || sc === document.documentElement) {
+      window.scrollBy(0, 800);
+    }
+    await rvSleep(500); // let the next page render / lazy-load
+
+    collect();
+    const moved = Math.abs(getScroller().scrollTop - before) > 2;
+    const grew = seen.size !== lastCount;
+    if (grew) lastCount = seen.size;
+    if (!moved && !grew) stable++;
+    else stable = 0;
+  }
+
+  const list = Array.from(seen, ([url, title]) => ({ url, title }));
+  // Surface how many rows we saw vs URLs we resolved — diagnoses extraction.
+  return { chatsJson: JSON.stringify(list), itemsSeen: String(itemsSeen) };
 }
 
 

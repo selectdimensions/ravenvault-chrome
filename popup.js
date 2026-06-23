@@ -173,9 +173,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (shouldStartExport) {
-                // Starting (Auto-start) - No UI flash, just start and close
-                chrome.runtime.sendMessage({ type: 'START_EXPORT', tabId: currentTab.id, windowId: currentTab.windowId, url: currentTab.url });
-                window.close();
+                // Offer a choice: export just this conversation, or every chat.
+                updateUI({
+                    title: 'Ready to export',
+                    status: 'Export this conversation, or all of your Poe chats.',
+                    icon: 'neutral',
+                    primary: 'Export this chat',
+                    primaryAction: () => {
+                        chrome.runtime.sendMessage({ type: 'START_EXPORT', tabId: currentTab.id, windowId: currentTab.windowId, url: currentTab.url });
+                        window.close();
+                    },
+                    secondary: 'Export ALL chats',
+                    secondaryAction: () => {
+                        chrome.runtime.sendMessage({ type: 'START_BULK_EXPORT', tabId: currentTab.id, windowId: currentTab.windowId, url: currentTab.url });
+                        window.close();
+                    }
+                });
             } else {
                 // Error (No active tab) or Invalid Page
                 updateUI({

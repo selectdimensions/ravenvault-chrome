@@ -344,6 +344,71 @@ async function onHostMessage(msg) {
     }
   }
   
+  // 1.6 Bulk export: navigate the tab to a chat URL (app-driven loop).
+  if (msg.type === 'request' && msg.command === 'navigate') {
+    (async () => {
+      try {
+        if (!userCancelled && msg.args && msg.args.session) {
+          const s = msg.args.session;
+          if (!currentSession || currentSession.tabId !== s.tabId) {
+            currentSession = { sessionId: `app-${s.tabId}`, tabId: s.tabId, windowId: s.windowId };
+          }
+        }
+        const tabId = getTabIdFromMessage(msg);
+        if (!tabId) throw new Error('NO_ACTIVE_SESSION');
+        const url = msg.args && msg.args.url;
+        if (!url) throw new Error('NO_URL');
+        await navigateTabAndWait(tabId, url);
+        await sendToHost({
+          version: '1', request_id: msg.request_id, source: 'extension',
+          type: 'response', command: 'navigate', result: { ok: 'true' }
+        });
+      } catch (e) {
+        await sendToHost({
+          version: '1', request_id: msg.request_id, source: 'extension',
+          type: 'error', command: 'navigate', error: { message: (e && e.message) || 'NAVIGATE_ERROR' }
+        });
+      }
+    })();
+    return;
+  }
+
+  // 1.7 Bulk export: enumerate the full chat history. Navigates the tab to the
+  // chats page, then has the content script scroll-scrape every /chat/ link.
+  if (msg.type === 'request' && msg.command === 'list_chats') {
+    (async () => {
+      try {
+        if (!userCancelled && msg.args && msg.args.session) {
+          const s = msg.args.session;
+          if (!currentSession || currentSession.tabId !== s.tabId) {
+            currentSession = { sessionId: `app-${s.tabId}`, tabId: s.tabId, windowId: s.windowId };
+          }
+        }
+        const tabId = getTabIdFromMessage(msg);
+        if (!tabId) throw new Error('NO_ACTIVE_SESSION');
+        await navigateTabAndWait(tabId, 'https://poe.com/chats');
+        const res = await execContent(tabId, {
+          version: '1', request_id: msg.request_id, type: 'request',
+          command: 'enumerateChats', args: {}
+        });
+        const chatsJson = (res && res.chatsJson) ? res.chatsJson : '[]';
+        let resolved = 0;
+        try { resolved = JSON.parse(chatsJson).length; } catch (e) {}
+        logToHost(`list_chats: resolved ${resolved} chat URLs from ${(res && res.itemsSeen) || '?'} rows`);
+        await sendToHost({
+          version: '1', request_id: msg.request_id, source: 'extension',
+          type: 'response', command: 'list_chats', result: { chats: chatsJson }
+        });
+      } catch (e) {
+        await sendToHost({
+          version: '1', request_id: msg.request_id, source: 'extension',
+          type: 'error', command: 'list_chats', error: { message: (e && e.message) || 'LIST_CHATS_ERROR' }
+        });
+      }
+    })();
+    return;
+  }
+
   const scrollCommands = new Set(['scrollGetMetrics', 'scrollSet', 'scrollBy', 'domQuery', 'domClick', 'windowSet', 'stopScroll', 'startKeepAlive', 'stopKeepAlive', 'validatePage', 'showError']);
   if (msg.type === 'request' && scrollCommands.has(msg.command)) {
       (async () => {
@@ -647,6 +712,29 @@ async function getActiveWebTab() {
   web = tabs.find(x => /^https?:/i.test(x.url || ''))
   if (web) return web
   throw new Error('NO_WEB_TAB')
+}
+
+// Navigate a tab to `url` and resolve once it finishes loading (plus a short
+// settle for the SPA to render). Best-effort: resolves on timeout too.
+async function navigateTabAndWait(tabId, url, timeoutMs = 40000) {
+  await chrome.tabs.update(tabId, { url });
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) {}
+      clearTimeout(timer);
+      resolve();
+    };
+    const listener = (id, info) => {
+      if (id === tabId && info.status === 'complete') finish();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+  // Let the SPA hydrate / render the conversation or chat list.
+  await new Promise((r) => setTimeout(r, 1500));
 }
 
 async function execContent(tabId, message) {
@@ -1088,7 +1176,7 @@ async function getVisibilityFor(tabId, windowId) {
     }
 }
 
-async function startExport(tab, skipValidation = false) {
+async function startExport(tab, skipValidation = false, isBulk = false) {
       userCancelled = false;
       // 1. Validate Page
       const isPoeChat = (() => {
@@ -1230,7 +1318,7 @@ async function startExport(tab, skipValidation = false) {
         request_id: crypto.randomUUID(),
         source: 'extension',
         type: 'command',
-        command: 'invoke_export',
+        command: isBulk ? 'invoke_bulk_export' : 'invoke_export',
         args: { tabId: tab.id, windowId: tab.windowId }
     });
 
@@ -1475,6 +1563,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 url: msg.url
             };
             await startExport(tab, true);
+        })();
+        sendResponse({ ok: true });
+        return;
+    }
+
+    if (msg && msg.type === 'START_BULK_EXPORT') {
+        (async () => {
+            const tab = {
+                id: msg.tabId,
+                windowId: msg.windowId,
+                url: msg.url
+            };
+            // Bulk export: the app enumerates all chats (list_chats) and drives
+            // navigate + capture for each.
+            await startExport(tab, true, true);
         })();
         sendResponse({ ok: true });
         return;

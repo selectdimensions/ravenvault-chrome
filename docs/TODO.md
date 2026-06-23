@@ -34,10 +34,16 @@ the user's live, logged-in browser session. **Gated on the M3 conversion fix**
 (don't mass-produce broken notes).
 
 Flow (reuses M2–M4 unchanged):
-1. **Enumerate chats** — read Poe's sidebar/history (`poe.com/chat/...` links),
-   scroll-scraping the list to lazy-load all of them. *Main unknown:* whether
-   the sidebar exposes the full history or only recent — investigate the real
-   DOM / look for a Poe history endpoint. Centralize selectors like M3.
+1. **Enumerate chats** — on `poe.com/chats` (infinite-scroll list). DISCOVERED
+   from the real DOM: rows are `li[class*=ChatHistoryListItem_wrapper]` with a
+   `div role="link"` and **NO href** — the chat code lives in React props, not
+   the DOM. Current approach: scroll the `InfiniteScroll_container` (nudging the
+   `InfiniteScroll_pagingTrigger`), collect rows as they render (they recycle),
+   and derive each URL from the row's React fiber props (`rvChatCodeOf`), titles
+   from `ChatHistoryListItem_title`. The extension logs "resolved N URLs from M
+   rows" for validation. **Fallback if React extraction yields 0:** click each
+   row to navigate and read the resulting `/chat/<code>` URL (click-to-navigate),
+   tracking done-by-title across the recycling list.
 2. **Per chat**: navigate the tab to the URL → run the existing capture flow →
    write note → next. Human-paced to avoid anti-automation.
 3. **Resume/idempotent**: vault writer upserts by `uid`, so re-runs skip/update,
