@@ -387,19 +387,29 @@ async function onHostMessage(msg) {
         const tabId = getTabIdFromMessage(msg);
         if (!tabId) throw new Error('NO_ACTIVE_SESSION');
         await navigateTabAndWait(tabId, 'https://poe.com/chats');
-        const res = await execContent(tabId, {
-          version: '1', request_id: msg.request_id, type: 'request',
-          command: 'enumerateChats', args: {}
-        });
-        const chatsJson = (res && res.chatsJson) ? res.chatsJson : '[]';
+        // Enumerate in the PAGE's MAIN world: React fibers (which hold the chat
+        // code) are only visible there, not from the content script's isolated
+        // world.
+        let res = { list: [], itemsSeen: 0, sample: 'no-result' };
+        try {
+          const out = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: pageEnumerateChats
+          });
+          if (out && out[0] && out[0].result) res = out[0].result;
+        } catch (e) {
+          res = { list: [], itemsSeen: 0, sample: 'exec-error: ' + ((e && e.message) || e) };
+        }
+        const chatsJson = JSON.stringify(res.list || []);
         await sendToHost({
           version: '1', request_id: msg.request_id, source: 'extension',
           type: 'response', command: 'list_chats',
           result: {
             chats: chatsJson,
-            itemsSeen: (res && res.itemsSeen) || '0',
-            debug: (res && res.debug) || '',
-            url: (res && res.url) || ''
+            itemsSeen: String(res.itemsSeen || 0),
+            debug: res.sample || '',
+            url: 'https://poe.com/chats'
           }
         });
       } catch (e) {
@@ -738,6 +748,121 @@ async function navigateTabAndWait(tabId, url, timeoutMs = 40000) {
   });
   // Let the SPA hydrate / render the conversation or chat list.
   await new Promise((r) => setTimeout(r, 1500));
+}
+
+// Injected into the page's MAIN world (chrome.scripting world:'MAIN') to
+// enumerate the chat history. Must be fully self-contained — no references to
+// outer scope. Scrolls the infinite list to load every row (collecting as it
+// goes, since rows recycle) and reads each chat's code from its React fiber
+// (visible only in the MAIN world). Returns { list:[{url,title}], itemsSeen, sample }.
+async function pageEnumerateChats() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const ITEM = '[class*="ChatHistoryListItem_wrapper"]';
+  const TITLE = '[class*="ChatHistoryListItem_title"]';
+  const SCROLLER = '[class*="InfiniteScroll_container"]';
+  const TRIGGER = '[class*="InfiniteScroll_pagingTrigger"]';
+
+  const fiberOf = (el) => {
+    const k = Object.keys(el).find(
+      (k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
+    );
+    return k ? el[k] : null;
+  };
+  const findCode = (obj, depth) => {
+    if (!obj || typeof obj !== 'object' || depth > 6) return null;
+    for (const k in obj) {
+      let v;
+      try { v = obj[k]; } catch (e) { continue; }
+      if (typeof v === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(v)) {
+        const key = k.replace(/_/g, '').toLowerCase();
+        if (/(chatcode|chatid|conversationid|^code$)/.test(key)) return v;
+      } else if (v && typeof v === 'object') {
+        const r = findCode(v, depth + 1);
+        if (r) return r;
+      }
+    }
+    return null;
+  };
+  const codeOf = (item) => {
+    const a = item.querySelector('a[href*="/chat/"]');
+    if (a) {
+      const m = (a.getAttribute('href') || '').match(/\/chat\/([A-Za-z0-9_-]+)/);
+      if (m) return m[1];
+    }
+    let f = fiberOf(item), d = 0;
+    while (f && d < 60) {
+      const c = findCode(f.memoizedProps, 0);
+      if (c) return c;
+      f = f.return;
+      d++;
+    }
+    return null;
+  };
+
+  const seen = new Map();
+  let itemsSeen = 0;
+  const collect = () => {
+    const items = document.querySelectorAll(ITEM);
+    itemsSeen = Math.max(itemsSeen, items.length);
+    items.forEach((item) => {
+      const t = item.querySelector(TITLE);
+      const title = t ? t.textContent.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+      const code = codeOf(item);
+      if (!code) return;
+      const url = 'https://poe.com/chat/' + code;
+      if (!seen.has(url) || (!seen.get(url) && title)) seen.set(url, title);
+    });
+  };
+  const getScroller = () => {
+    const c = document.querySelector(SCROLLER);
+    if (c && c.scrollHeight > c.clientHeight + 20) return c;
+    return document.scrollingElement || document.documentElement;
+  };
+
+  for (let w = 0; w < 30 && document.querySelectorAll(ITEM).length === 0; w++) await sleep(500);
+  collect();
+  let last = seen.size, stable = 0;
+  for (let i = 0; i < 6000 && stable < 8; i++) {
+    const sc = getScroller();
+    const before = sc.scrollTop;
+    const trig = document.querySelector(TRIGGER);
+    if (trig && trig.scrollIntoView) trig.scrollIntoView({ block: 'end' });
+    sc.scrollTop = before + Math.max(400, (sc.clientHeight || 600) * 0.9);
+    window.scrollBy(0, 800);
+    await sleep(900);
+    collect();
+    const moved = Math.abs(getScroller().scrollTop - before) > 2;
+    const grew = seen.size !== last;
+    if (grew) last = seen.size;
+    if (!moved && !grew) stable++;
+    else stable = 0;
+  }
+
+  let sample = '';
+  if (seen.size === 0 && itemsSeen > 0) {
+    const item = document.querySelector(ITEM);
+    const f0 = item ? fiberOf(item) : null;
+    if (!f0) {
+      sample = 'no-fiber-key-in-main-world';
+    } else {
+      const hits = [], vis = new Set();
+      const scan = (o, path, depth) => {
+        if (!o || typeof o !== 'object' || depth > 3 || vis.has(o)) return;
+        vis.add(o);
+        for (const k in o) {
+          let v;
+          try { v = o[k]; } catch (e) { continue; }
+          if (typeof v === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(v)) hits.push(path + '.' + k + '=' + v);
+          else if (v && typeof v === 'object') scan(v, path + '.' + k, depth + 1);
+        }
+      };
+      let f = f0, d = 0;
+      while (f && d < 25) { if (f.memoizedProps) scan(f.memoizedProps, 'L' + d, 0); f = f.return; d++; }
+      sample = hits.slice(0, 25).join(' | ') || 'no-code-like-strings';
+    }
+  }
+
+  return { list: Array.from(seen, ([url, title]) => ({ url, title })), itemsSeen, sample };
 }
 
 async function execContent(tabId, message) {

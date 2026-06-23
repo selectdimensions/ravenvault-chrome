@@ -240,8 +240,9 @@ fn dump_html(dir: &str, capture: &Capture) {
 // Bulk export ("Export All")
 // ---------------------------------------------------------------------------
 
-/// Max time to enumerate the chat list (the extension scroll-scrapes the sidebar).
-const TIMEOUT_LIST: Duration = Duration::from_secs(180);
+/// Max time to enumerate the chat list (the extension scroll-loads the whole
+/// history in the page, which can be 1000s of rows).
+const TIMEOUT_LIST: Duration = Duration::from_secs(420);
 /// Max time for the extension to navigate the tab to a chat and become ready.
 const TIMEOUT_NAV: Duration = Duration::from_secs(45);
 
