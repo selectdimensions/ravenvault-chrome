@@ -5,6 +5,8 @@
 //! capture the page HTML, reassembles the chunked HTML, and (from M3/M4) converts
 //! it to Markdown and writes it to the vault. See `docs/PROTOCOL.md` §9.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,7 +19,9 @@ use tracing::{debug, info, warn};
 
 use crate::client::Client;
 use crate::context::AppContext;
+use crate::html2md;
 use crate::protocol::Envelope;
+use crate::vault::{ExportNote, VaultWriter};
 
 /// Timeout for a single orchestration request (scroll/dom/window commands).
 const TIMEOUT_CMD: Duration = Duration::from_secs(10);
@@ -92,13 +96,19 @@ pub async fn run_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope)
     *ctx.busy.lock().await = false;
 
     match result {
-        Ok(capture) => {
-            info!(
-                title = %capture.chat_title,
-                html_bytes = capture.html.len(),
-                "capture complete (conversion/vault wired in M3/M4)"
-            );
-            let _ = client.send(update_ui(&session, "success", "Export complete"));
+        Ok(outcome) => {
+            match &outcome.note_path {
+                Some(p) => {
+                    info!(title = %outcome.title, path = %p.display(), "export written to vault")
+                }
+                None => info!(title = %outcome.title, "export captured (no vault configured)"),
+            }
+            let msg = if outcome.note_path.is_some() {
+                "Export complete"
+            } else {
+                "Captured — set RAVENVAULT_VAULT to save to your vault"
+            };
+            let _ = client.send(update_ui(&session, "success", msg));
         }
         Err(e) => {
             warn!(error = %e, "export failed");
@@ -107,13 +117,21 @@ pub async fn run_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope)
     }
 }
 
-/// The export flow proper, returning the captured page.
+/// What an export produced.
+#[derive(Debug, Clone)]
+struct ExportResult {
+    title: String,
+    /// Path of the written note, or `None` if no vault is configured.
+    note_path: Option<PathBuf>,
+}
+
+/// The export flow proper: scroll, capture, convert, download assets, write.
 async fn do_export(
     client: &Client,
     ctx: &Arc<AppContext>,
     session: &Session,
     mut inbox: mpsc::UnboundedReceiver<Envelope>,
-) -> Result<Capture> {
+) -> Result<ExportResult> {
     // Start the service-worker keep-alive so the tab stays live during scrolling.
     let _ = client
         .request(
@@ -137,10 +155,52 @@ async fn do_export(
 
     let capture = collect_capture(&mut inbox).await?;
 
+    // Convert HTML -> Markdown (M3).
+    let convo = html2md::html_to_markdown(&capture.html, &capture.chat_title);
+
+    // Download referenced assets via the extension relay (M2 mechanism).
+    let mut assets: HashMap<String, Vec<u8>> = HashMap::new();
+    let total_assets = convo.asset_urls.len();
+    for (i, url) in convo.asset_urls.iter().enumerate() {
+        set_status(
+            ctx,
+            &format!("Downloading assets… {}/{total_assets}", i + 1),
+        )
+        .await;
+        match download_asset(client, &mut inbox, url).await {
+            Ok(bytes) => {
+                assets.insert(url.clone(), bytes);
+            }
+            // A missing asset shouldn't fail the whole export.
+            Err(e) => warn!(%url, error = %e, "asset download failed; skipping"),
+        }
+    }
+
     let _ = client
         .request(scroll_req("stopKeepAlive", session, json!({})), TIMEOUT_CMD)
         .await;
-    Ok(capture)
+
+    // Write to the vault (M4), if one is configured.
+    let note_path = match &ctx.vault_path {
+        Some(root) => {
+            set_status(ctx, "Writing to vault…").await;
+            let note = ExportNote {
+                title: convo.title.clone(),
+                markdown: convo.markdown,
+                assets,
+                source_url: None,
+                created: None,
+            };
+            let writer = VaultWriter::new(root.clone());
+            Some(writer.write(note)?)
+        }
+        None => None,
+    };
+
+    Ok(ExportResult {
+        title: convo.title,
+        note_path,
+    })
 }
 
 /// Drive the scroll loop until the conversation is scrolled to the top (oldest
