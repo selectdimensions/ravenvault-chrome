@@ -768,30 +768,38 @@ async function pageEnumerateChats() {
     );
     return k ? el[k] : null;
   };
-  const findCode = (obj, depth) => {
-    if (!obj || typeof obj !== 'object' || depth > 6) return null;
-    for (const k in obj) {
-      let v;
-      try { v = obj[k]; } catch (e) { continue; }
-      if (typeof v === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(v)) {
-        const key = k.replace(/_/g, '').toLowerCase();
-        if (/(chatcode|chatid|conversationid|^code$)/.test(key)) return v;
-      } else if (v && typeof v === 'object') {
-        const r = findCode(v, depth + 1);
-        if (r) return r;
+  // SAFE props scan: cycle-guarded, depth-bounded, and skips DOM nodes + React
+  // elements (which are huge/circular and caused a hang). Returns a chat code
+  // found under a chat-code-ish key, else null.
+  const findCode = (props) => {
+    const seen = new Set();
+    const walk = (o, depth) => {
+      if (!o || typeof o !== 'object' || depth > 3 || seen.has(o)) return null;
+      if (o.nodeType || o.$$typeof) return null; // DOM node / React element
+      seen.add(o);
+      for (const k in o) {
+        let v;
+        try { v = o[k]; } catch (e) { continue; }
+        if (typeof v === 'string') {
+          if (/^[A-Za-z0-9_-]{8,}$/.test(v)) {
+            const key = k.replace(/_/g, '').toLowerCase();
+            if (key === 'chatcode' || key === 'chatid' || key === 'conversationid' || key === 'code') {
+              return v;
+            }
+          }
+        } else if (v && typeof v === 'object') {
+          const r = walk(v, depth + 1);
+          if (r) return r;
+        }
       }
-    }
-    return null;
+      return null;
+    };
+    return walk(props, 0);
   };
   const codeOf = (item) => {
-    const a = item.querySelector('a[href*="/chat/"]');
-    if (a) {
-      const m = (a.getAttribute('href') || '').match(/\/chat\/([A-Za-z0-9_-]+)/);
-      if (m) return m[1];
-    }
     let f = fiberOf(item), d = 0;
-    while (f && d < 60) {
-      const c = findCode(f.memoizedProps, 0);
+    while (f && d < 40) {
+      const c = findCode(f.memoizedProps);
       if (c) return c;
       f = f.return;
       d++;
@@ -822,14 +830,15 @@ async function pageEnumerateChats() {
   for (let w = 0; w < 30 && document.querySelectorAll(ITEM).length === 0; w++) await sleep(500);
   collect();
   let last = seen.size, stable = 0;
-  for (let i = 0; i < 6000 && stable < 8; i++) {
+  const deadline = Date.now() + 240000; // hard 4-min budget so we always return
+  for (let i = 0; i < 6000 && stable < 8 && Date.now() < deadline; i++) {
     const sc = getScroller();
     const before = sc.scrollTop;
     const trig = document.querySelector(TRIGGER);
     if (trig && trig.scrollIntoView) trig.scrollIntoView({ block: 'end' });
     sc.scrollTop = before + Math.max(400, (sc.clientHeight || 600) * 0.9);
     window.scrollBy(0, 800);
-    await sleep(900);
+    await sleep(800);
     collect();
     const moved = Math.abs(getScroller().scrollTop - before) > 2;
     const grew = seen.size !== last;
@@ -848,6 +857,7 @@ async function pageEnumerateChats() {
       const hits = [], vis = new Set();
       const scan = (o, path, depth) => {
         if (!o || typeof o !== 'object' || depth > 3 || vis.has(o)) return;
+        if (o.nodeType || o.$$typeof) return;
         vis.add(o);
         for (const k in o) {
           let v;
@@ -858,7 +868,7 @@ async function pageEnumerateChats() {
       };
       let f = f0, d = 0;
       while (f && d < 25) { if (f.memoizedProps) scan(f.memoizedProps, 'L' + d, 0); f = f.return; d++; }
-      sample = hits.slice(0, 25).join(' | ') || 'no-code-like-strings';
+      sample = hits.slice(0, 30).join(' | ') || 'no-code-like-strings';
     }
   }
 
