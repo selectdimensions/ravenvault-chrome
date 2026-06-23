@@ -1,0 +1,16 @@
+#!/bin/sh
+# Wire up the bundled GTK/WebKit runtime for a classic-confinement snap, then run
+# the Tauri binary. Classic snaps don't get the gnome extension's environment, so
+# we point the dynamic loader and GDK at the staged libraries under $SNAP.
+set -e
+
+ARCH_TRIPLET="$(uname -m)-linux-gnu"
+
+export LD_LIBRARY_PATH="$SNAP/usr/lib/$ARCH_TRIPLET:$SNAP/usr/lib/$ARCH_TRIPLET/webkit2gtk-4.1:$SNAP/usr/lib:${LD_LIBRARY_PATH:-}"
+export GIO_MODULE_DIR="$SNAP/usr/lib/$ARCH_TRIPLET/gio/modules"
+export GDK_PIXBUF_MODULE_FILE="$SNAP/usr/lib/$ARCH_TRIPLET/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+# WebKitGTK under confinement is more reliable without GPU compositing.
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
+
+# Config lives in the real user config dir (classic = full filesystem access).
+exec "$@"

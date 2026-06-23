@@ -10,5 +10,11 @@ linux-app/target/
 # Tauri generated schemas (regenerated on build)
 linux-app/gui/gen/
 
+# Snap build artifacts
+linux-app/parts/
+linux-app/stage/
+linux-app/prime/
+linux-app/*.snap
+
 # macOS reference app (not source)
 RavenVault-latest.dmg

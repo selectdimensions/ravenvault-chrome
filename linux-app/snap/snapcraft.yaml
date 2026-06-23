@@ -1,0 +1,64 @@
+name: ravenvault
+base: core24
+version: '0.9.1'
+summary: Export Poe.com conversations to Obsidian
+description: |
+  RavenVault is the local companion app for the RavenVault browser extension.
+  It receives Poe.com conversations captured by the extension over a localhost
+  WebSocket (127.0.0.1:53122), converts them to clean Markdown, downloads
+  images, and saves them into your Obsidian vault. It can optionally ingest each
+  conversation into MemPalace (LLM long-term memory).
+
+  Open the tray icon to choose your vault folder and toggle MemPalace.
+
+grade: stable
+
+# Classic confinement is required: the app writes to an arbitrary, user-chosen
+# Obsidian vault — which may be a hidden folder or live outside $HOME — and does
+# so continuously in the background. No auto-connecting strict interface
+# (home/removable-media/personal-files) covers that case, so we ship classic and
+# justify it at review time. (A strict alternative limited to a visible folder
+# under $HOME is noted in docs/SNAP.md.)
+confinement: classic
+
+platforms:
+  amd64:
+
+apps:
+  ravenvault:
+    # The launcher wires up the bundled GTK/WebKit runtime before exec'ing the
+    # Tauri binary (classic snaps don't get the gnome extension's wiring).
+    command-chain: [bin/launcher]
+    command: bin/ravenvault-gui
+    desktop: usr/share/applications/ravenvault.desktop
+
+parts:
+  ravenvault:
+    plugin: rust
+    source: .
+    # Build only the GUI workspace member (it depends on the core crate).
+    rust-path: [gui]
+    build-packages:
+      - libwebkit2gtk-4.1-dev
+      - libssl-dev
+      - libayatana-appindicator3-dev
+      - librsvg2-dev
+      - libgtk-3-dev
+      - pkg-config
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libayatana-appindicator3-1
+      - librsvg2-2
+      - libgtk-3-0
+
+  runtime:
+    plugin: dump
+    source: snap/local
+    organize:
+      launcher: bin/launcher
+      ravenvault.desktop: usr/share/applications/ravenvault.desktop
+      ravenvault.png: usr/share/icons/hicolor/128x128/apps/ravenvault.png
+    stage:
+      - bin/launcher
+      - usr/share/applications/ravenvault.desktop
+      - usr/share/icons/hicolor/128x128/apps/ravenvault.png
