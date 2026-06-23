@@ -7,6 +7,9 @@
 //!
 //! See `docs/PROTOCOL.md` in the repository root for the full wire contract.
 
+pub mod client;
+pub mod context;
+pub mod export;
 pub mod protocol;
 pub mod server;
 

@@ -27,6 +27,7 @@ tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "net", "i
 tokio-tungstenite = "0.29.0"
 futures-util = "0.3.32"
 uuid = { version = "1.20.0", features = ["v4"] }
+base64 = "0.22.1"
 
 [dev-dependencies]
 

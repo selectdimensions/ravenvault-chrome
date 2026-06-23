@@ -2,15 +2,23 @@
 //!
 //! Initializes logging and runs the WebSocket server the extension connects to.
 
+use std::sync::Arc;
+
 use anyhow::Result;
-use ravenvault::server::{self, Dispatcher};
+use ravenvault::context::AppContext;
+use ravenvault::server;
 use ravenvault::WS_BIND_ADDR;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     init_tracing();
+    let ctx = Arc::new(AppContext::from_env());
+    match &ctx.vault_path {
+        Some(p) => info!(vault = %p.display(), "vault configured"),
+        None => warn!("no vault configured; set RAVENVAULT_VAULT to your Obsidian vault path"),
+    }
     info!(
         version = ravenvault::APP_VERSION,
         bind = WS_BIND_ADDR,
@@ -23,10 +31,9 @@ async fn main() -> Result<()> {
     );
 
     let listener = server::bind(WS_BIND_ADDR).await?;
-    let dispatcher = Dispatcher::new();
 
     tokio::select! {
-        res = server::serve(listener, dispatcher) => {
+        res = server::serve(listener, ctx) => {
             res?;
         }
         _ = tokio::signal::ctrl_c() => {

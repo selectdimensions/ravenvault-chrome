@@ -2,9 +2,11 @@
 //! replay the exact handshake the extension sends, asserting we answer correctly.
 
 use std::cmp::Ordering;
+use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
-use ravenvault::server::{self, Dispatcher};
+use ravenvault::context::AppContext;
+use ravenvault::server;
 use tokio_tungstenite::tungstenite::Message;
 
 #[tokio::test]
@@ -12,7 +14,7 @@ async fn server_answers_extension_handshake() {
     // Bind on port 0 -> OS picks a free port; serve in the background.
     let listener = server::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    tokio::spawn(server::serve(listener, Dispatcher::new()));
+    tokio::spawn(server::serve(listener, Arc::new(AppContext::new(None))));
 
     // Connect as the extension does.
     let url = format!("ws://{addr}");
@@ -51,7 +53,7 @@ async fn server_answers_extension_handshake() {
 async fn server_ignores_keep_alive_ping_without_replying() {
     let listener = server::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    tokio::spawn(server::serve(listener, Dispatcher::new()));
+    tokio::spawn(server::serve(listener, Arc::new(AppContext::new(None))));
 
     let url = format!("ws://{addr}");
     let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
