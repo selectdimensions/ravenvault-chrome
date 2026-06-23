@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Handler for `ravenvault://` URLs (and the desktop launcher). Its only job is to
+# make sure the background service is running; the URL argument ($1) is ignored.
+exec systemctl --user start ravenvault.service

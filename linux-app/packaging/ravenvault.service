@@ -1,0 +1,15 @@
+[Unit]
+Description=RavenVault — Poe.com to Obsidian export companion
+Documentation=https://github.com/ravenvault/ravenvault-chrome
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Reads config from ~/.config/ravenvault/config.json; env vars override it.
+Environment=RUST_LOG=info
+ExecStart=%h/.local/bin/ravenvault
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

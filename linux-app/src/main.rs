@@ -14,7 +14,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> Result<()> {
     init_tracing();
-    let ctx = Arc::new(AppContext::from_env());
+    let ctx = Arc::new(AppContext::load());
     match &ctx.vault_path {
         Some(p) => info!(vault = %p.display(), "vault configured"),
         None => warn!("no vault configured; set RAVENVAULT_VAULT to your Obsidian vault path"),
