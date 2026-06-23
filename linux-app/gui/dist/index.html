@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RavenVault Settings</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; max-width: 480px; color: #1c1c1c; }
+      h2 { margin-top: 0; }
+      label { display: block; margin: 14px 0 4px; font-weight: 600; }
+      input[type="text"] { width: 100%; padding: 7px; box-sizing: border-box; font-size: 14px; }
+      .row { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+      .row label { margin: 0; font-weight: 400; }
+      button { margin-top: 22px; padding: 9px 18px; font-size: 14px; cursor: pointer; }
+      .msg { margin-top: 14px; min-height: 18px; }
+      .hint { color: #666; font-size: 12px; margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <h2>RavenVault</h2>
+    <label for="vault">Obsidian vault folder</label>
+    <input id="vault" type="text" placeholder="/home/you/Obsidian/MyVault" />
+    <div class="hint">Notes and an <code>attachments/</code> folder are written here.</div>
+
+    <div class="row">
+      <input id="mp" type="checkbox" />
+      <label for="mp">Ingest exports into MemPalace (LLM memory)</label>
+    </div>
+
+    <label for="mpbin">MemPalace binary</label>
+    <input id="mpbin" type="text" placeholder="mempalace" />
+
+    <button id="save">Save</button>
+    <div class="msg" id="msg"></div>
+
+    <script>
+      const { invoke } = window.__TAURI__.core;
+
+      async function load() {
+        const c = await invoke("get_config");
+        document.getElementById("vault").value = c.vault_path || "";
+        document.getElementById("mp").checked = !!c.mempalace_enabled;
+        document.getElementById("mpbin").value = c.mempalace_bin || "";
+      }
+
+      document.getElementById("save").onclick = async () => {
+        const msg = document.getElementById("msg");
+        const cfg = {
+          vault_path: document.getElementById("vault").value,
+          mempalace_enabled: document.getElementById("mp").checked,
+          mempalace_bin: document.getElementById("mpbin").value,
+        };
+        try {
+          await invoke("save_config", { cfg });
+          msg.style.color = "green";
+          msg.textContent = "Saved. Restart RavenVault (or the service) to apply.";
+        } catch (e) {
+          msg.style.color = "red";
+          msg.textContent = "Error: " + e;
+        }
+      };
+
+      load();
+    </script>
+  </body>
+</html>

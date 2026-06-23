@@ -1,3 +1,11 @@
+[workspace]
+members = ["gui"]
+# The headless core builds with no system libraries; the GUI needs webkit2gtk.
+# Default commands target the core only so `cargo build`/`test` stay dependency-light;
+# build the GUI explicitly with `-p ravenvault-gui`.
+default-members = ["."]
+resolver = "2"
+
 [package]
 name = "ravenvault"
 version = "0.9.1"

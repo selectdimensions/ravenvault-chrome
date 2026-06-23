@@ -7,7 +7,8 @@
 
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use anyhow::{Context as _, Result};
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::warn;
 
@@ -26,7 +27,7 @@ pub struct SessionStatus {
 }
 
 /// On-disk configuration (all optional; missing fields fall back to defaults).
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FileConfig {
     /// Path to the destination Obsidian vault.
     pub vault_path: Option<String>,
@@ -122,8 +123,27 @@ impl AppContext {
     }
 }
 
+/// The current on-disk config, or defaults if absent/unreadable.
+pub fn current_file_config() -> FileConfig {
+    config_file_path()
+        .and_then(read_file_config)
+        .unwrap_or_default()
+}
+
+/// Write the config file (creating `~/.config/ravenvault/` if needed), pretty.
+pub fn save_file_config(fc: &FileConfig) -> Result<()> {
+    let path = config_file_path().context("could not resolve config path (no HOME?)")?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create config dir {}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(fc).context("serialize config")?;
+    std::fs::write(&path, json).with_context(|| format!("write config {}", path.display()))?;
+    Ok(())
+}
+
 /// Resolve the config file path from `XDG_CONFIG_HOME` or `~/.config`.
-fn config_file_path() -> Option<PathBuf> {
+pub fn config_file_path() -> Option<PathBuf> {
     let base = std::env::var("XDG_CONFIG_HOME")
         .ok()
         .filter(|s| !s.is_empty())
