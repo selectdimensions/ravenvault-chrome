@@ -245,6 +245,13 @@ fn dump_html(dir: &str, capture: &Capture) {
 const TIMEOUT_LIST: Duration = Duration::from_secs(420);
 /// Max time for the extension to navigate the tab to a chat and become ready.
 const TIMEOUT_NAV: Duration = Duration::from_secs(45);
+/// Default pause between chats in a bulk run (overridable via
+/// `RAVENVAULT_BULK_PAUSE_MS`) so the browser doesn't bloat across 1000s of loads.
+const BULK_PAUSE_DEFAULT_MS: u64 = 1500;
+/// Take a longer rest every N exported chats to let the browser reclaim memory.
+const BULK_REST_EVERY: usize = 40;
+/// How long that periodic rest lasts.
+const BULK_REST: Duration = Duration::from_secs(20);
 
 /// A chat reference returned by the extension's `list_chats`.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -365,6 +372,13 @@ async fn bulk_loop(
         )
         .await;
 
+    // Pacing between chats (tunable) to avoid bloating the browser on long runs.
+    let pause = std::env::var("RAVENVAULT_BULK_PAUSE_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .unwrap_or(Duration::from_millis(BULK_PAUSE_DEFAULT_MS));
+
     let mut sum = BulkSummary {
         total,
         ..Default::default()
@@ -408,6 +422,16 @@ async fn bulk_loop(
                 warn!(url = %chat.url, error = %e, "chat export failed; continuing");
                 sum.failed += 1;
             }
+        }
+
+        // Pace the run: brief pause after each chat, longer rest periodically so
+        // the browser can reclaim memory across a very long batch.
+        tokio::time::sleep(pause).await;
+        let processed = sum.exported + sum.failed;
+        if processed > 0 && processed % BULK_REST_EVERY == 0 {
+            info!(processed, "bulk: resting to let the browser reclaim memory");
+            set_status(ctx, "Resting to free browser memory…").await;
+            tokio::time::sleep(BULK_REST).await;
         }
     }
 
