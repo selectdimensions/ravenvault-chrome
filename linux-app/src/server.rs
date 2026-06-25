@@ -174,6 +174,19 @@ async fn route(env: Envelope, client: &Client, ctx: &Arc<AppContext>) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             debug!(%msg, "extension log");
+            // The extension logs the active tab's URL (message "Active tab URL",
+            // url in args.url). Remember poe.com conversation URLs so single
+            // exports can record the conversation as the note's `source`.
+            if let Some(url) = active_tab_url(&env) {
+                *ctx.last_active_url.lock().await = Some(url);
+            }
+        }
+        "open_result" => {
+            let last = ctx.last_note_path.lock().await.clone();
+            match open_target(last, ctx.vault_path.clone()) {
+                Some(path) => open_in_default_app(&path),
+                None => debug!("open_result with no target to open"),
+            }
         }
         "check_destination" => {
             let _ = client.send(check_destination_reply(ctx, env.request_id.clone()));
@@ -184,6 +197,52 @@ async fn route(env: Envelope, client: &Client, ctx: &Arc<AppContext>) {
         "invoke_export" => spawn_export(client, ctx, env, false).await,
         "invoke_bulk_export" => spawn_export(client, ctx, env, true).await,
         other => warn!(command = other, msg_type = %env.msg_type, "unhandled message"),
+    }
+}
+
+/// Extract a poe.com active-tab URL from a `log` envelope, if it is one.
+///
+/// The extension emits `log {message:"Active tab URL", url}` for the focused tab.
+/// Returns the URL only when the message matches and the url looks like a
+/// poe.com URL — pure (no side effects), so it can be unit-tested directly.
+fn active_tab_url(env: &Envelope) -> Option<String> {
+    let args = env.args.as_ref()?;
+    let message = args.get("message").and_then(|v| v.as_str())?;
+    if message != "Active tab URL" {
+        return None;
+    }
+    let url = args.get("url").and_then(|v| v.as_str())?;
+    is_poe_url(url).then(|| url.to_string())
+}
+
+/// Whether `url` is an http(s) URL whose host is poe.com (or a subdomain).
+fn is_poe_url(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"));
+    let Some(rest) = rest else { return false };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    // Strip any userinfo/port.
+    let host = host.rsplit('@').next().unwrap_or(host);
+    let host = host.split(':').next().unwrap_or(host);
+    host == "poe.com" || host.ends_with(".poe.com")
+}
+
+/// Resolve what `open_result` should open: the last written note if we have one,
+/// else the vault root, else nothing. Pure (no I/O) so it is unit-testable.
+fn open_target(
+    last_note_path: Option<std::path::PathBuf>,
+    vault_path: Option<std::path::PathBuf>,
+) -> Option<std::path::PathBuf> {
+    last_note_path.or(vault_path)
+}
+
+/// Open `path` in the OS default application via `xdg-open`, detached. Best-effort:
+/// spawn errors are ignored (the user just won't see a window pop up).
+fn open_in_default_app(path: &std::path::Path) {
+    match std::process::Command::new("xdg-open").arg(path).spawn() {
+        Ok(_) => info!(path = %path.display(), "opened result in default app"),
+        Err(e) => warn!(path = %path.display(), error = %e, "failed to xdg-open result"),
     }
 }
 
@@ -264,6 +323,66 @@ mod tests {
         let reply = check_destination_reply(&ctx, Some("rid".into()));
         // Ready => no "message" field.
         assert!(reply.result.unwrap().get("message").is_none());
+    }
+
+    #[test]
+    fn open_target_prefers_last_note_then_vault_then_none() {
+        use std::path::PathBuf;
+        let note = PathBuf::from("/v/Note.md");
+        let vault = PathBuf::from("/v");
+        // Last note set => returns the note.
+        assert_eq!(
+            open_target(Some(note.clone()), Some(vault.clone())),
+            Some(note.clone())
+        );
+        // No note => returns the vault.
+        assert_eq!(open_target(None, Some(vault.clone())), Some(vault));
+        // Neither => None.
+        assert_eq!(open_target(None, None), None);
+    }
+
+    #[test]
+    fn active_tab_url_extracts_only_matching_poe_logs() {
+        // Matching message + poe.com url => extracted.
+        let e = Envelope::command(
+            "log",
+            json!({ "message": "Active tab URL", "url": "https://poe.com/chat/abc" }),
+        );
+        assert_eq!(
+            active_tab_url(&e).as_deref(),
+            Some("https://poe.com/chat/abc")
+        );
+
+        // Different message => ignored even with a poe url.
+        let e2 = Envelope::command(
+            "log",
+            json!({ "message": "something else", "url": "https://poe.com/chat/abc" }),
+        );
+        assert!(active_tab_url(&e2).is_none());
+
+        // Right message but non-poe url => ignored.
+        let e3 = Envelope::command(
+            "log",
+            json!({ "message": "Active tab URL", "url": "https://example.com/x" }),
+        );
+        assert!(active_tab_url(&e3).is_none());
+
+        // Subdomain of poe.com is accepted.
+        let e4 = Envelope::command(
+            "log",
+            json!({ "message": "Active tab URL", "url": "https://www.poe.com/chat/z" }),
+        );
+        assert_eq!(
+            active_tab_url(&e4).as_deref(),
+            Some("https://www.poe.com/chat/z")
+        );
+
+        // A look-alike host is rejected.
+        let e5 = Envelope::command(
+            "log",
+            json!({ "message": "Active tab URL", "url": "https://poe.com.evil.com/x" }),
+        );
+        assert!(active_tab_url(&e5).is_none());
     }
 
     #[tokio::test]

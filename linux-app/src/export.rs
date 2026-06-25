@@ -119,12 +119,14 @@ pub async fn run_export(client: Client, ctx: Arc<AppContext>, invoke: &Envelope)
                 }
                 None => info!(title = %outcome.title, "export captured (no vault configured)"),
             }
-            let msg = if outcome.note_path.is_some() {
+            let wrote = outcome.note_path.is_some();
+            let msg = if wrote {
                 "Export complete"
             } else {
                 "Captured — set RAVENVAULT_VAULT to save to your vault"
             };
-            let _ = client.send(update_ui(&session, "success", msg));
+            // Offer the Open button only when a note was actually written.
+            let _ = client.send(update_ui_opts(&session, "success", msg, wrote));
         }
         Err(e) => {
             warn!(error = %e, "export failed");
@@ -199,6 +201,14 @@ pub(crate) async fn capture_one(
 
     // Write to the vault (M4), if one is configured. MemPalace ingest is NOT
     // automatic — it's a separate, on-demand action (CLI `ingest` / tray menu).
+    // Single exports don't pass a source URL; fall back to the last active-tab
+    // URL the extension reported (a poe.com conversation URL). Bulk always passes
+    // the chat URL, so `source_url` is already set for it.
+    let source_url = match source_url {
+        Some(u) => Some(u),
+        None => ctx.last_active_url.lock().await.clone(),
+    };
+
     let note_path = match &ctx.vault_path {
         Some(root) => {
             set_status(ctx, "Writing to vault…").await;
@@ -207,10 +217,13 @@ pub(crate) async fn capture_one(
                 markdown: convo.markdown,
                 assets,
                 source_url,
-                created: None,
+                created: Some(now_rfc3339()),
             };
             let writer = VaultWriter::new(root.clone());
-            Some(writer.write(note)?)
+            let path = writer.write(note)?;
+            // Remember the written note so `open_result` can open it.
+            *ctx.last_note_path.lock().await = Some(path.clone());
+            Some(path)
         }
         None => None,
     };
@@ -663,12 +676,28 @@ fn scroll_req(command: &str, session: &Session, extra: Value) -> Envelope {
 }
 
 fn update_ui(session: &Session, ui_type: &str, message: &str) -> Envelope {
+    update_ui_opts(session, ui_type, message, false)
+}
+
+/// Like [`update_ui`], but can request the extension show an "Open" button by
+/// setting `ui.showOpenButton:"true"` (see PROTOCOL.md §2.11/§3.8). The extension
+/// only renders Open when that field is present.
+fn update_ui_opts(
+    session: &Session,
+    ui_type: &str,
+    message: &str,
+    show_open_button: bool,
+) -> Envelope {
+    let mut ui = json!({ "type": ui_type, "message": message });
+    if show_open_button {
+        ui["showOpenButton"] = json!("true");
+    }
     Envelope::command(
         "update_ui",
         json!({
             "tabId": session.tab_id,
             "session": session.json(),
-            "ui": { "type": ui_type, "message": message }
+            "ui": ui
         }),
     )
 }
@@ -686,6 +715,12 @@ fn abort_export(session: &Session, message: &str) -> Envelope {
 
 async fn set_status(ctx: &Arc<AppContext>, status: &str) {
     ctx.session.lock().await.status = status.to_string();
+}
+
+/// Current UTC time as an RFC 3339 / ISO-8601 string with a trailing `Z`
+/// (e.g. `2026-06-24T22:10:00Z`), used for the note's `created` frontmatter.
+fn now_rfc3339() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 /// Read a numeric field that may arrive as a JSON number or a stringified number
@@ -744,6 +779,33 @@ mod tests {
     fn reassemble_fails_on_missing_chunk() {
         let chunks = vec![Some("aGk=".to_string()), None];
         assert!(reassemble_base64(&chunks).is_err());
+    }
+
+    #[test]
+    fn now_rfc3339_is_iso8601_zulu() {
+        let s = now_rfc3339();
+        // Shape: YYYY-MM-DDTHH:MM:SSZ
+        assert!(s.ends_with('Z'), "expected trailing Z: {s}");
+        assert_eq!(s.len(), 20, "expected 20 chars: {s}");
+        assert_eq!(&s[4..5], "-");
+        assert_eq!(&s[10..11], "T");
+        // Parses back as a valid RFC 3339 timestamp.
+        assert!(chrono::DateTime::parse_from_rfc3339(&s).is_ok());
+    }
+
+    #[test]
+    fn update_ui_success_with_open_button_sets_flag() {
+        let session = Session {
+            tab_id: 1,
+            window_id: 2,
+        };
+        let env = update_ui_opts(&session, "success", "Export complete", true);
+        let ui = &env.args.as_ref().unwrap()["ui"];
+        assert_eq!(ui["showOpenButton"], "true");
+
+        let env2 = update_ui(&session, "success", "Export complete");
+        let ui2 = &env2.args.as_ref().unwrap()["ui"];
+        assert!(ui2.get("showOpenButton").is_none());
     }
 
     #[test]

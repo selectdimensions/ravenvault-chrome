@@ -58,6 +58,12 @@ pub struct AppContext {
     /// MemPalace (LLM memory) ingest configuration. Ingest is **manual only**
     /// (CLI `ingest` subcommand or the tray menu) — never automatic on export.
     pub mempalace: MemPalaceConfig,
+    /// Path of the most recently written note, used to answer the extension's
+    /// `open_result` ("Open" button) by opening that file in the OS default app.
+    pub last_note_path: Mutex<Option<PathBuf>>,
+    /// Most recent active-tab URL reported by the extension's `log` message
+    /// (a poe.com conversation URL). Used as the `source` for single exports.
+    pub last_active_url: Mutex<Option<String>>,
 }
 
 impl AppContext {
@@ -69,6 +75,8 @@ impl AppContext {
             cancel: AtomicBool::new(false),
             bulk_active: AtomicBool::new(false),
             mempalace: MemPalaceConfig::default(),
+            last_note_path: Mutex::new(None),
+            last_active_url: Mutex::new(None),
         }
     }
 
@@ -90,6 +98,8 @@ impl AppContext {
             cancel: AtomicBool::new(false),
             bulk_active: AtomicBool::new(false),
             mempalace,
+            last_note_path: Mutex::new(None),
+            last_active_url: Mutex::new(None),
         }
     }
 
@@ -134,6 +144,8 @@ impl AppContext {
             cancel: AtomicBool::new(false),
             bulk_active: AtomicBool::new(false),
             mempalace: MemPalaceConfig::from_env(),
+            last_note_path: Mutex::new(None),
+            last_active_url: Mutex::new(None),
         }
     }
 }

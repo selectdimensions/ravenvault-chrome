@@ -39,6 +39,7 @@ base64 = "0.22.1"
 scraper = "0.27.0"
 sha2 = "0.10.9"
 unicode-normalization = "0.1.25"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
