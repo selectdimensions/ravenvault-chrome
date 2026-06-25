@@ -1245,19 +1245,12 @@ function isPoeChat(url) {
 }
 
 async function updateActionState(tabId, url) {
-    const isChat = isPoeChat(url);
-    const isExportTab = currentSession && currentSession.tabId === tabId;
-    const busyElsewhere = currentSession && !isExportTab;
-    let popup = 'popup.html';
-    if (isExportTab) {
-        popup = '';
-    } else if (isChat && !busyElsewhere) {
-        popup = '';
-    } else {
-        popup = 'popup.html';
-    }
+    // Always show the popup so the user can choose "Export this chat" vs
+    // "Export ALL chats" everywhere on poe.com. (Previously chat pages and the
+    // active export tab suppressed the popup for one-click export, which hid the
+    // "Export ALL" option — and a stale session could leave it suppressed.)
     try {
-        await chrome.action.setPopup({ tabId: tabId, popup });
+        await chrome.action.setPopup({ tabId: tabId, popup: 'popup.html' });
     } catch (e) {}
 }
 
