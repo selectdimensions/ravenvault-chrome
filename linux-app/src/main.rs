@@ -13,7 +13,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use ravenvault::context::AppContext;
 use ravenvault::WS_BIND_ADDR;
-use ravenvault::{mempalace, server};
+use ravenvault::{manifest, mempalace, server};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -25,6 +25,7 @@ async fn main() -> Result<()> {
     if let Some(cmd) = args.next() {
         match cmd.as_str() {
             "ingest" => return run_ingest(args.next()).await,
+            "manifest" => return run_manifest(args.next()).await,
             "--help" | "-h" => {
                 print_help();
                 return Ok(());
@@ -84,12 +85,34 @@ async fn run_ingest(dir_arg: Option<String>) -> Result<()> {
     Ok(())
 }
 
+/// Scan a vault (default: the configured vault) for exported Poe notes and write a
+/// slug/URL manifest into `<vault>/.ravenvault/`, then exit.
+async fn run_manifest(dir_arg: Option<String>) -> Result<()> {
+    let ctx = AppContext::load();
+    let dir = dir_arg
+        .map(PathBuf::from)
+        .or(ctx.vault_path)
+        .context("no folder given and no vault configured (set vault_path in config.json)")?;
+
+    let entries = manifest::build_manifest(&dir)?;
+    let with_slug = entries.iter().filter(|e| !e.slug.is_empty()).count();
+    let out = manifest::write_manifest(&dir, &entries)?;
+    println!(
+        "Wrote manifest for {} chats to {} ({} with a slug)",
+        entries.len(),
+        out.display(),
+        with_slug
+    );
+    Ok(())
+}
+
 fn print_help() {
     println!(
         "RavenVault Linux companion v{}\n\n\
          USAGE:\n  \
          ravenvault              Run the WebSocket server for the extension\n  \
          ravenvault ingest [DIR] Ingest DIR (or the configured vault) into MemPalace\n  \
+         ravenvault manifest [DIR] Scan DIR (or the vault) for Poe notes; write a slug/URL manifest\n  \
          ravenvault --help       Show this help",
         ravenvault::APP_VERSION
     );
