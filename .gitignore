@@ -18,3 +18,6 @@ linux-app/*.snap
 
 # macOS reference app (not source)
 RavenVault-latest.dmg
+
+# Built extension upload package (reproducible via scripts/package-extension.sh)
+dist/poe2obsidian-extension-*.zip

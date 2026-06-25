@@ -1,8 +1,18 @@
-# RavenVault Chrome Extension
+# Poe2Obsidian
 
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/jjcpdcmcellmiaagaihhbgohaidfpmkp)](https://chromewebstore.google.com/detail/ravenvault/jjcpdcmcellmiaagaihhbgohaidfpmkp)
+Export your Poe.com AI conversations to a local Obsidian vault as clean Markdown
+— one chat, or your **entire history** ("Export All"). A Chrome/Chromium
+extension captures the conversation in your browser; a small **Linux companion
+app** ([`linux-app/`](linux-app/)) running on your machine converts it to
+Markdown, downloads images, and writes it to your vault. Nothing leaves your
+computer.
 
-RavenVault is a Chrome extension that exports Poe.com AI conversations to your local Obsidian vault as clean Markdown files. It works in conjunction with the [RavenVault macOS app](https://ravenvault.app/)—the extension captures content from your browser while the app handles conversion and storage. Without the companion app running, exports cannot complete.
+> Poe2Obsidian is an open-source fork of the MIT-licensed **RavenVault**
+> extension, with a new Linux-native companion app. See [NOTICE.md](NOTICE.md).
+> Not affiliated with RavenVault / ravenvault.app.
+
+**Deploy:** [Chrome Web Store guide](docs/CHROME_STORE.md) ·
+[Snap Store guide](docs/SNAP.md) · [Linux app usage](linux-app/USAGE.md)
 
 ## Installation
 

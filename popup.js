@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     status: res.error === UI_CONSTANTS.ERRORS.APP_NOT_RUNNING ? UI_CONSTANTS.POPUP.STATUS.APP_NOT_OPEN : res.error,
                     icon: 'error',
                     primary: res.error === UI_CONSTANTS.ERRORS.APP_NOT_RUNNING ? UI_CONSTANTS.POPUP.BUTTONS.LAUNCH_APP : UI_CONSTANTS.POPUP.BUTTONS.DISMISS,
-                    downloadUrl: res.error === UI_CONSTANTS.ERRORS.APP_NOT_RUNNING ? 'https://ravenvault.app' : undefined,
+                    downloadUrl: res.error === UI_CONSTANTS.ERRORS.APP_NOT_RUNNING ? 'https://github.com/selectdimensions/ravenvault-chrome#readme' : undefined,
                     primaryAction: () => {
                          if (res.error === UI_CONSTANTS.ERRORS.APP_NOT_RUNNING) {
                              // Notify background to expect app launch and auto-start

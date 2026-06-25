@@ -6,7 +6,7 @@ The packaging lives in [`linux-app/snap/`](../linux-app/snap/):
   (`ravenvault-gui`) with the Rust plugin and stages the GTK/WebKit runtime.
 - `snap/local/launcher` — wires `LD_LIBRARY_PATH`/GDK to the bundled runtime
   (classic snaps don't get the gnome extension's environment).
-- `snap/local/ravenvault.desktop`, `ravenvault.png` — desktop integration.
+- `snap/local/poe2obsidian.desktop`, `poe2obsidian.png` — desktop integration.
 
 ## Why classic confinement
 
@@ -30,7 +30,7 @@ constrain users to a **visible folder under `$HOME`**:
 ```yaml
 confinement: strict
 apps:
-  ravenvault:
+  poe2obsidian:
     extensions: [gnome]
     plugs: [home, network-bind]
 ```
@@ -46,7 +46,7 @@ sudo snap install lxd && sudo lxd init --auto
 sudo usermod -aG lxd "$USER"   # then re-login so the group applies
 
 cd linux-app
-snapcraft            # builds in an LXD container -> ravenvault_0.9.1_amd64.snap
+snapcraft            # builds in an LXD container -> poe2obsidian_0.11.0_amd64.snap
 ```
 
 On an Ubuntu 24.04 host you can avoid LXD with a host build:
@@ -58,23 +58,23 @@ cd linux-app && snapcraft --destructive-mode
 Install and test the built snap locally (keeps classic confinement):
 
 ```bash
-sudo snap install --dangerous --classic ravenvault_0.9.1_amd64.snap
-ravenvault            # launches the tray app
+sudo snap install --dangerous --classic poe2obsidian_0.11.0_amd64.snap
+poe2obsidian          # launches the tray app
 ```
 
 ## Pre-submission review
 
 ```bash
 sudo snap install review-tools     # provides snap-review
-snap-review ravenvault_0.9.1_amd64.snap
+snap-review poe2obsidian_0.11.0_amd64.snap
 ```
 
 ## Publish to the Snap Store
 
 ```bash
 snapcraft login
-snapcraft register ravenvault      # one-time (name must be available/owned)
-snapcraft upload --release=stable ravenvault_0.9.1_amd64.snap
+snapcraft register poe2obsidian      # one-time (name must be available/owned)
+snapcraft upload --release=stable poe2obsidian_0.11.0_amd64.snap
 ```
 
 Because the snap is **classic**, the first upload triggers a **manual review**
@@ -83,7 +83,7 @@ Because the snap is **classic**, the first upload triggers a **manual review**
 ## Known follow-ups
 
 - The `launcher` library paths are best-effort; verify with
-  `sudo snap run --shell ravenvault` and adjust if WebKit/GTK can't find a
+  `sudo snap run --shell poe2obsidian` and adjust if WebKit/GTK can't find a
   library. `snappy-debug` while running surfaces any AppArmor denials (mainly
   relevant if you switch to strict).
 - Add `arm64` to `platforms` once tested on that architecture.

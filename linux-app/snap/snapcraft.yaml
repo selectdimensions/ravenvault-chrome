@@ -1,15 +1,17 @@
-name: ravenvault
+name: poe2obsidian
 base: core24
-version: '0.9.1'
-summary: Export Poe.com conversations to Obsidian
+version: '0.11.0'
+summary: Export your Poe.com chats to Obsidian as Markdown
 description: |
-  RavenVault is the local companion app for the RavenVault browser extension.
-  It receives Poe.com conversations captured by the extension over a localhost
-  WebSocket (127.0.0.1:53122), converts them to clean Markdown, downloads
-  images, and saves them into your Obsidian vault. It can optionally ingest each
-  conversation into MemPalace (LLM long-term memory).
+  Poe2Obsidian is the local companion app for the Poe2Obsidian browser
+  extension. It receives Poe.com conversations captured by the extension over a
+  localhost WebSocket (127.0.0.1:53122), converts them to clean Markdown,
+  downloads images, and saves them into your Obsidian vault — one chat or your
+  whole history. It can optionally ingest each conversation into MemPalace (LLM
+  long-term memory).
 
-  Open the tray icon to choose your vault folder and toggle MemPalace.
+  Open the tray icon to choose your vault folder. Based on the open-source
+  RavenVault extension (MIT).
 
 grade: stable
 
@@ -25,15 +27,15 @@ platforms:
   amd64:
 
 apps:
-  ravenvault:
+  poe2obsidian:
     # The launcher wires up the bundled GTK/WebKit runtime before exec'ing the
     # Tauri binary (classic snaps don't get the gnome extension's wiring).
     command-chain: [bin/launcher]
     command: bin/ravenvault-gui
-    desktop: usr/share/applications/ravenvault.desktop
+    desktop: usr/share/applications/poe2obsidian.desktop
 
 parts:
-  ravenvault:
+  poe2obsidian:
     plugin: rust
     source: .
     # Build only the GUI workspace member (it depends on the core crate).
@@ -56,9 +58,9 @@ parts:
     source: snap/local
     organize:
       launcher: bin/launcher
-      ravenvault.desktop: usr/share/applications/ravenvault.desktop
-      ravenvault.png: usr/share/icons/hicolor/128x128/apps/ravenvault.png
+      poe2obsidian.desktop: usr/share/applications/poe2obsidian.desktop
+      poe2obsidian.png: usr/share/icons/hicolor/128x128/apps/poe2obsidian.png
     stage:
       - bin/launcher
-      - usr/share/applications/ravenvault.desktop
-      - usr/share/icons/hicolor/128x128/apps/ravenvault.png
+      - usr/share/applications/poe2obsidian.desktop
+      - usr/share/icons/hicolor/128x128/apps/poe2obsidian.png

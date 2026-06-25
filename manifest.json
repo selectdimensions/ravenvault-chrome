@@ -1,11 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "RavenVault",
-  "short_name": "RavenVault",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq71XRydXtCUYMagPowCFfy4H7sUkri2F2LsDoy2eyS1dMP58VVmvSkWsHoiSnUbA69vIjb5IDD8juAXWASW9/VxzMDLU+X1a3vrkNB493mxHAiwVoB1ve4MV5GkNrAZIQls73kcp00PNcITG45eUO23+nPwIYVnyz8+EnWEGQ0yQyJLrDYeq0KDCNcobxOIo4p0F9hsu9I/i11f4xxQbafF89Gx7rYn3tKpJjk8D7mP5iUow0/QRFVnRYqg1nmBqmBqq580yqCeCSfrfjtxJLGCsE7cJfLPe8GesEKxtE92H6iw6w1C4TXgbARWTgjkeegetDku2arG3yF+P7Tgf9QIDAQAB",
-  "version": "0.10.0",
-  "description": "Export Poe.com AI conversations to Obsidian as Markdown",
-  "homepage_url": "https://ravenvault.app",
+  "name": "Poe2Obsidian",
+  "short_name": "Poe2Obsidian",
+  "version": "0.11.0",
+  "description": "Export your Poe.com AI conversations to an Obsidian vault as clean Markdown — one chat or your whole history.",
+  "homepage_url": "https://github.com/selectdimensions/ravenvault-chrome",
   "permissions": [
     "scripting",
     "activeTab",
@@ -19,11 +18,6 @@
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],
-  "externally_connectable": {
-    "matches": [
-      "https://ravenvault.app/*"
-    ]
-  },
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -34,7 +28,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "RavenVault",
+    "default_title": "Poe2Obsidian",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=RavenVault
+Name=Poe2Obsidian
 Comment=Export Poe.com conversations to Obsidian
-Exec=ravenvault
-Icon=ravenvault
+Exec=poe2obsidian
+Icon=poe2obsidian
 Terminal=false
 Categories=Utility;Network;
 Keywords=poe;obsidian;export;markdown;
