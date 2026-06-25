@@ -2,6 +2,31 @@
 
 Tracked follow-ups after the initial M0–M7 build. Roughly priority-ordered.
 
+## Status (2026-06-24)
+
+**Shipped & proven:** the full pipeline + **Export All** exported the user's entire
+Poe history (1470/1470 chats, 0 failed). Recently completed leftovers:
+- [x] M3 conversion correct on real DOM (roles via `rightSideMessageWrapper` /
+  `BotMessageHeader`; fenced code blocks; prose-only body).
+- [x] Bulk "Export All" — MAIN-world enumeration (React fibers), slug from
+  `href=/chat/<slug>`, main-list scoping, ignore self-navigation aborts, pacing,
+  resume-by-uid.
+- [x] `ravenvault manifest` CLI (slug/URL record for a future Playwright path).
+- [x] Expand collapsed code blocks before capture (extension) — *needs live check*.
+- [x] Working "Open" button (`open_result`), `source` + `created` frontmatter.
+- [x] CI workflow (`.github/workflows/ci.yml`).
+
+**Blocked on external prerequisites (cannot complete in this environment):**
+- [ ] M7 snap build + Store submission — needs `snapcraft` + LXD and a Store
+  login (runbook in `docs/SNAP.md`).
+- [ ] Tray on *vanilla* GNOME — needs that desktop to verify the fallback.
+
+**Still open (doable, lower priority):** live config reload (no restart on
+settings change); GUI live-progress + deck; deep-link plugin; restore scroll/
+window on abort; arm64 snap; more integration tests (cancel mid-run).
+
+---
+
 ## Conversion quality (M3) — highest priority
 
 The Poe DOM selectors were written from documented class names, not a real
