@@ -6,8 +6,34 @@
 
 let cachedBlob = null;
 
+// Poe collapses long code blocks in the DOM (only the visible portion is
+// rendered until expanded). Click every "expand" control before capture so the
+// serialized HTML contains the full code. Best-effort; bounded.
+async function expandCollapsedCodeBlocks() {
+  const SELECTORS = [
+    '[class*="MarkdownCodeBlock_expandButton"]',
+    '[class*="MarkdownCodeBlock_collapsible"] button',
+  ];
+  const clicked = new WeakSet();
+  for (let pass = 0; pass < 12; pass++) {
+    let any = false;
+    for (const sel of SELECTORS) {
+      const btns = document.querySelectorAll(sel);
+      for (const b of btns) {
+        if (clicked.has(b)) continue;
+        clicked.add(b);
+        try { b.click(); any = true; } catch (e) { /* ignore */ }
+      }
+    }
+    if (!any) break;
+    await new Promise((r) => setTimeout(r, 250)); // let expanded code render
+  }
+}
+
 async function handle(req) {
   if (req && req.command === 'preparePageHTML') {
+    // Reveal full code in any collapsed code blocks before serializing.
+    try { await expandCollapsedCodeBlocks(); } catch (e) { /* non-fatal */ }
     const doc = document
     let doctype = '<!DOCTYPE html>'
     const dt = doc.doctype
