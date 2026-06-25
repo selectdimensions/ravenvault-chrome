@@ -254,19 +254,6 @@ async function onHostMessage(msg) {
         logCurrentActiveTabURL(true);
     }
 
-    if (msg.type === 'command' && msg.command === 'close_connect_tab') {
-        (async () => {
-            try {
-                const tabs = await chrome.tabs.query({ url: ['*://ravenvault.app/connect/*'] });
-                if (!tabs || !tabs.length) return;
-                const ids = tabs.map((tab) => tab.id).filter((id) => id !== undefined);
-                if (!ids.length) return;
-                await chrome.tabs.remove(ids);
-            } catch (e) {}
-        })();
-        return;
-    }
-
     // 0.5 Handle App-Driven Capture Start
     if (msg.command === 'capture_start') {
         (async () => {
@@ -1541,21 +1528,6 @@ chrome.runtime.onConnect.addListener((port) => {
              }
         });
     }
-});
-
-chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.type !== 'ping') {
-      return;
-  }
-  sendResponse({ type: 'pong' });
-
-  // Connect to App (fixes onboarding detection)
-  connectWebSocket();
-
-  if (sender.tab && sender.tab.id !== undefined) {
-      chrome.tabs.remove(sender.tab.id).catch(() => {});
-  }
-  return true;
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
