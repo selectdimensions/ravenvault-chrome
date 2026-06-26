@@ -24,3 +24,7 @@ dist/poe2obsidian-extension-*.zip
 
 # tool history
 .cc-history/
+
+# editor lock files
+.~lock.*#
+*/.~lock.*#
