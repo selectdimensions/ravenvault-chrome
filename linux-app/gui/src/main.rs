@@ -1,4 +1,4 @@
-//! RavenVault desktop GUI (Tauri v2).
+//! Poe2Obsidian desktop GUI (Tauri v2).
 //!
 //! Wraps the headless `ravenvault` core: runs the WebSocket server in the
 //! background and provides a system-tray icon (Settings / Open Vault / Quit) plus
@@ -81,7 +81,7 @@ fn main() {
             let menu = Menu::with_items(app, &[&settings_i, &open_vault_i, &ingest_i, &quit_i])?;
 
             let tray = TrayIconBuilder::with_id("main")
-                .tooltip("RavenVault")
+                .tooltip("Poe2Obsidian")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "settings" => {
@@ -142,5 +142,5 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running RavenVault");
+        .expect("error while running Poe2Obsidian");
 }

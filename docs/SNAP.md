@@ -1,4 +1,4 @@
-# Building & publishing the RavenVault snap
+# Building & publishing the Poe2Obsidian snap
 
 The packaging lives in [`linux-app/snap/`](../linux-app/snap/):
 
@@ -10,7 +10,7 @@ The packaging lives in [`linux-app/snap/`](../linux-app/snap/):
 
 ## Why classic confinement
 
-RavenVault writes to an **arbitrary, user-chosen Obsidian vault** that may be a
+Poe2Obsidian writes to an **arbitrary, user-chosen Obsidian vault** that may be a
 hidden folder or live outside `$HOME`, and it writes continuously in the
 background. No auto-connecting strict interface covers that:
 

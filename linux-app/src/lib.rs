@@ -1,6 +1,6 @@
-//! RavenVault Linux companion app — library crate.
+//! Poe2Obsidian Linux companion app — library crate.
 //!
-//! This is the headless core of the RavenVault native app. The Chrome extension
+//! This is the headless core of the Poe2Obsidian native app. The Chrome extension
 //! (a WebSocket *client*) connects to the server this crate runs on
 //! `127.0.0.1:53122`, ships raw Poe.com DOM HTML plus fetched asset bytes, and the
 //! app converts that into clean Obsidian Markdown.

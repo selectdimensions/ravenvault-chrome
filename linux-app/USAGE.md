@@ -1,4 +1,4 @@
-# Using RavenVault on Linux
+# Using Poe2Obsidian on Linux
 
 The Linux companion app is the local server the Chrome/Chromium extension talks
 to. Install it, point it at your Obsidian vault, load the extension, and export
@@ -68,7 +68,7 @@ extension will connect to the app on `ws://127.0.0.1:53122`.
 
 ## 4. Export
 
-Open a Poe.com chat and click the RavenVault toolbar icon. The app drives the
+Open a Poe.com chat and click the Poe2Obsidian toolbar icon. The app drives the
 scroll-and-capture, converts the page to Markdown, downloads images, and writes
 the note into your vault.
 

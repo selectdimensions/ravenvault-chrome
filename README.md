@@ -16,30 +16,44 @@ computer.
 
 ## Installation
 
-**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/ravenvault/jjcpdcmcellmiaagaihhbgohaidfpmkp)**
+Two parts work together — the **extension** (this folder) and the **Linux
+companion app** ([`linux-app/`](linux-app/)):
 
-This repository contains the complete source code for the Chrome extension. We've open-sourced it so you can audit exactly what runs in your browser and verify that your data stays on your machine.
+1. **Companion app** — `cd linux-app && ./packaging/install.sh` (no sudo). Then
+   set your vault in `~/.config/ravenvault/config.json`. See
+   [`linux-app/USAGE.md`](linux-app/USAGE.md).
+2. **Extension** — load unpacked (`chrome://extensions` → Developer Mode → Load
+   unpacked → this folder), or install the packaged build per
+   [`docs/CHROME_STORE.md`](docs/CHROME_STORE.md).
 
 ```
 ┌────────────────────┐                      ┌──────────────────────┐                      ┌─────────────────────────┐
-│  Chrome Extension  │  ←── WebSocket ───→  │  RavenVault macOS    │  ──────────────────→ │  Obsidian Vault         │
-│  (this code)       │      localhost       │  App                 │                      │  (Markdown + assets)    │
+│  Chrome Extension  │  ←── WebSocket ───→  │  Poe2Obsidian app    │  ──────────────────→ │  Obsidian Vault         │
+│  (this folder)     │   127.0.0.1:53122    │  (Linux companion)   │                      │  (Markdown + assets)    │
 └────────────────────┘                      └──────────────────────┘                      └─────────────────────────┘
 ```
+
+The extension captures the page; the companion app converts to Markdown,
+downloads images, writes to your vault, and can optionally ingest each chat into
+[MemPalace](https://github.com/MemPalace/mempalace) (manual). Without the app
+running, exports can't complete.
 
 ---
 
 ## Privacy & Security
 
-This extension is designed with privacy as a core principle.
+Privacy is a core principle.
 
-**All communication stays on your machine.** The extension connects only to a local WebSocket server (localhost/127.0.0.1) running on your computer as part of the RavenVault macOS app. No data is sent to any external servers.
+**All communication stays on your machine.** The extension connects only to a
+local WebSocket server (`127.0.0.1:53122`) run by the Poe2Obsidian companion app
+on your computer. No data is sent to any external servers.
 
-**No background data collection.** The extension activates only when you click its icon on a Poe.com page. It does not monitor your browsing, collect analytics, or phone home.
+**No background data collection.** The extension acts only when you click its
+icon on a Poe.com page. It does not monitor browsing, collect analytics, or
+phone home.
 
-**Minimal permissions.** The extension requests only the permissions necessary to function (see below).
-
-**Fully auditable.** This repository contains the complete, unobfuscated source code. The published Chrome Web Store version is built directly from this source with no additional transformations.
+**Fully auditable.** This repository contains the complete, unobfuscated source
+for both the extension and the companion app.
 
 ---
 
@@ -49,52 +63,32 @@ The extension requests these permissions in `manifest.json`:
 
 | Permission | Why It's Needed |
 |------------|-----------------|
-| `activeTab` | To access the current Poe.com page when you click the extension icon |
-| `scripting` | To inject the content script that captures the page and displays status UI |
-| `tabs` | To detect when you navigate away from or close a tab during export |
-| Host permission: `poe.com` | To run on Poe.com chat pages |
-| Host permission: `poecdn.net` | To download images and attachments from Poe's CDN |
-| Host permission: `localhost` | To communicate with the RavenVault macOS app on your machine |
-| `externally_connectable`: `ravenvault.app` | Allows the RavenVault onboarding page to detect when the extension is installed and complete setup automatically |
+| `activeTab` | Access the current Poe.com chat when you click the icon |
+| `scripting` | Inject the capture/status content script, and enumerate chats for "Export All" |
+| `tabs` | Detect tab navigation/close, and navigate between chats during "Export All" |
+| Host: `poe.com` | Run on Poe.com chat pages |
+| Host: `poecdn.net` | Download images/attachments from Poe's CDN |
+| Host: `localhost` / `127.0.0.1` | Talk to the local companion app |
 
-The extension does not request permissions for browsing history, bookmarks, downloads, or any other sensitive browser data.
+No browsing history, bookmarks, or downloads permissions are requested.
 
 ---
 
 ## How It Works
 
-When you click the extension icon, it connects to the locally-running macOS app via WebSocket. The app coordinates the export by sending commands to scroll through and capture the conversation. The extension captures page content, including messages, code blocks, tables, and images, and fetches any media assets. All processing and file storage happens in the macOS app on your machine.
+Clicking the icon connects to the local companion app over WebSocket. The app
+drives the export — scrolling/capturing the conversation (or enumerating and
+walking every chat for "Export All") — and the extension captures page content
+(messages, code blocks, tables, images) and fetches assets. All conversion and
+file storage happen in the companion app on your machine. See
+[`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the wire protocol.
 
 ---
 
-## Verifying the Published Extension
+## License & Attribution
 
-To confirm the Chrome Web Store version matches this source code:
+MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
-1. Clone this repository to your computer
-2. In Chrome, go to `chrome://extensions` and enable Developer Mode
-3. Click "Load unpacked" and select the repository folder
-4. Compare the loaded extension's behavior and code against the Web Store version
-
-You can also inspect the installed extension's source files directly:
-
-1. Go to `chrome://extensions`
-2. Find RavenVault and click "Details"
-3. Click "Inspect views" to open DevTools
-4. Navigate to the Sources tab to view the running code
-
-The extension contains no build step or minification—what you see in this repository is exactly what runs in your browser. Auditors can directly compare source files in DevTools against this repository to verify they match.
-
----
-
-## License
-
-MIT License. See [LICENSE](LICENSE) file.
-
-Copyright (c) 2026 RavenVault
-
----
-
-## Contributions
-
-This repository is provided for transparency and auditing purposes only. We are not accepting pull requests, issues, or feature suggestions on this repository.
+Poe2Obsidian is a fork of the MIT-licensed **RavenVault** extension.
+Copyright (c) 2026 RavenVault (original extension).
+Modifications (Linux app, Export All, rebrand) © 2026 selectdimensions.

@@ -21,7 +21,7 @@ if (typeof UI_CONSTANTS === 'undefined') {
                 LOADING_HISTORY: "Loading history...",
                 BUSY_ANOTHER_TAB: "Another tab is exporting.",
                 NO_ACTIVE_TAB_HINT: "Open a chat on poe.com to export.",
-                APP_NOT_OPEN: "Open RavenVault to continue."
+                APP_NOT_OPEN: "Open Poe2Obsidian to continue."
             },
             BUTTONS: {
                 RETURN_TO_EXPORT: "Show",
@@ -53,18 +53,18 @@ if (typeof UI_CONSTANTS === 'undefined') {
 
         // Error Messages (background.js)
         ERRORS: {
-            CONNECTION_FAILED: "Unable to connect to RavenVault. Please make sure the desktop app is open and try again.",
-            CONNECTION_CLOSED: "Connection to RavenVault was closed.",
-            CONNECTION_TIMED_OUT: "Connection timed out. Please check if RavenVault is open.",
-            APP_NOT_RUNNING: "RavenVault is not running. Please open the desktop app.",
-            ONLY_POE_PAGES: "RavenVault only works on Poe.com chat pages.",
-            EXPORT_IN_PROGRESS_OTHER_TAB: "RavenVault is already exporting in another tab.",
+            CONNECTION_FAILED: "Unable to connect to Poe2Obsidian. Please make sure the desktop app is open and try again.",
+            CONNECTION_CLOSED: "Connection to Poe2Obsidian was closed.",
+            CONNECTION_TIMED_OUT: "Connection timed out. Please check if Poe2Obsidian is open.",
+            APP_NOT_RUNNING: "Poe2Obsidian is not running. Please open the desktop app.",
+            ONLY_POE_PAGES: "Poe2Obsidian only works on Poe.com chat pages.",
+            EXPORT_IN_PROGRESS_OTHER_TAB: "Poe2Obsidian is already exporting in another tab.",
             CAPTURE_HTML_FAILED: "Something went wrong capturing the chat: ",
             UNKNOWN: "Unknown error",
             
             // Version Errors
-            APP_OUTDATED: "RavenVault Desktop App is outdated. Please update to continue.",
-            EXTENSION_OUTDATED: "RavenVault Extension is outdated. Please update via Chrome Web Store."
+            APP_OUTDATED: "Poe2Obsidian Desktop App is outdated. Please update to continue.",
+            EXTENSION_OUTDATED: "Poe2Obsidian Extension is outdated. Please update via Chrome Web Store."
         }
     };
 }

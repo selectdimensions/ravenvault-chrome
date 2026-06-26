@@ -1,5 +1,5 @@
 [Unit]
-Description=RavenVault — Poe.com to Obsidian export companion
+Description=Poe2Obsidian — Poe.com to Obsidian export companion
 Documentation=https://github.com/ravenvault/ravenvault-chrome
 After=graphical-session.target
 

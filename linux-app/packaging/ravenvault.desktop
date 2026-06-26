@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=RavenVault
+Name=Poe2Obsidian
 Comment=Export Poe.com conversations to Obsidian
 Exec=ravenvault-open %u
 Icon=ravenvault

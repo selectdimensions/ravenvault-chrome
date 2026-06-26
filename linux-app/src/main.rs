@@ -1,4 +1,4 @@
-//! RavenVault Linux companion app — headless binary entry point.
+//! Poe2Obsidian Linux companion app — headless binary entry point.
 //!
 //! Usage:
 //!   ravenvault            Run the WebSocket server the extension connects to.
@@ -51,10 +51,10 @@ async fn run_server() -> Result<()> {
     info!(
         version = ravenvault::APP_VERSION,
         bind = WS_BIND_ADDR,
-        "RavenVault Linux companion starting"
+        "Poe2Obsidian Linux companion starting"
     );
     println!(
-        "RavenVault Linux companion v{} — WebSocket server on ws://{}",
+        "Poe2Obsidian Linux companion v{} — WebSocket server on ws://{}",
         ravenvault::APP_VERSION,
         WS_BIND_ADDR
     );
@@ -108,7 +108,7 @@ async fn run_manifest(dir_arg: Option<String>) -> Result<()> {
 
 fn print_help() {
     println!(
-        "RavenVault Linux companion v{}\n\n\
+        "Poe2Obsidian Linux companion v{}\n\n\
          USAGE:\n  \
          ravenvault              Run the WebSocket server for the extension\n  \
          ravenvault ingest [DIR] Ingest DIR (or the configured vault) into MemPalace\n  \

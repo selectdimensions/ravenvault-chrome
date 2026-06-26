@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local CI gate for the RavenVault Linux app: format, lint, test.
+# Local CI gate for the Poe2Obsidian Linux app: format, lint, test.
 # The headless core is always checked. The GUI crate (ravenvault-gui) is checked
 # only when its system dependency (webkit2gtk-4.1) is available, so this script
 # still passes on a headless machine.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "RavenVault",
+  "productName": "Poe2Obsidian",
   "version": "0.9.1",
   "identifier": "app.ravenvault.desktop",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "settings",
-        "title": "RavenVault Settings",
+        "title": "Poe2Obsidian Settings",
         "width": 540,
         "height": 540,
         "resizable": true,
@@ -27,7 +27,7 @@
     "targets": ["deb"],
     "category": "Utility",
     "shortDescription": "Export Poe.com chats to Obsidian",
-    "longDescription": "RavenVault is the local companion that receives Poe.com conversations from the browser extension and saves them as Markdown in your Obsidian vault.",
+    "longDescription": "Poe2Obsidian is the local companion that receives Poe.com conversations from the browser extension and saves them as Markdown in your Obsidian vault.",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.png"]
   }
 }

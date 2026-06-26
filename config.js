@@ -5,7 +5,7 @@
  */
 
 /**
- * Centralized configuration for the RavenVault Extension.
+ * Centralized configuration for the Poe2Obsidian Extension.
  * This file contains all hardcoded values used in the extension background and content scripts.
  */
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RavenVault Settings</title>
+    <title>Poe2Obsidian Settings</title>
     <style>
       body { font-family: system-ui, sans-serif; margin: 24px; max-width: 480px; color: #1c1c1c; }
       h2 { margin-top: 0; }
@@ -17,7 +17,7 @@
     </style>
   </head>
   <body>
-    <h2>RavenVault</h2>
+    <h2>Poe2Obsidian</h2>
     <label for="vault">Obsidian vault folder</label>
     <input id="vault" type="text" placeholder="/home/you/Obsidian/MyVault" />
     <div class="hint">Notes and an <code>attachments/</code> folder are written here.</div>
@@ -53,7 +53,7 @@
         try {
           await invoke("save_config", { cfg });
           msg.style.color = "green";
-          msg.textContent = "Saved. Restart RavenVault (or the service) to apply.";
+          msg.textContent = "Saved. Restart Poe2Obsidian (or the service) to apply.";
         } catch (e) {
           msg.style.color = "red";
           msg.textContent = "Error: " + e;

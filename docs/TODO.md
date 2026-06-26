@@ -1,4 +1,4 @@
-# RavenVault Linux — TODO / future work
+# Poe2Obsidian Linux — TODO / future work
 
 Tracked follow-ups after the initial M0–M7 build. Roughly priority-ordered.
 

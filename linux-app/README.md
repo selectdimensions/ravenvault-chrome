@@ -1,6 +1,6 @@
-# RavenVault — Linux companion app
+# Poe2Obsidian — Linux companion app
 
-The native companion app that pairs with the RavenVault Chrome extension on Linux
+The native companion app that pairs with the Poe2Obsidian Chrome extension on Linux
 (target: Ubuntu 24.04). The extension is a WebSocket *client*; **this app is the
 server** it connects to on `ws://127.0.0.1:53122`. The app receives raw Poe.com
 DOM HTML plus fetched image bytes, converts them to clean Obsidian Markdown, and

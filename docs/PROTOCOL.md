@@ -1,4 +1,4 @@
-# RavenVault Extension ↔ Native App — WebSocket Protocol
+# Poe2Obsidian Extension ↔ Companion App — WebSocket Protocol
 
 Reverse-engineered from the extension source in this repo. This is the **contract the Linux
 native app must implement** to be a drop-in replacement for the macOS app. All `type`/`command`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install RavenVault for the current user — NO sudo required. Builds the release
+# Install Poe2Obsidian for the current user — NO sudo required. Builds the release
 # binary, installs a user systemd service that runs it on login, and registers
 # the `ravenvault://` URL scheme.
 set -euo pipefail
@@ -50,7 +50,7 @@ systemctl --user enable --now ravenvault.service
 
 cat <<EOF
 
-RavenVault is installed and running for your user.
+Poe2Obsidian is installed and running for your user.
 
   Set your vault:   edit ${CONFIG_DIR}/config.json  ("vault_path")
                     then: systemctl --user restart ravenvault
