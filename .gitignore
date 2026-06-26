@@ -21,3 +21,6 @@ RavenVault-latest.dmg
 
 # Built extension upload package (reproducible via scripts/package-extension.sh)
 dist/poe2obsidian-extension-*.zip
+
+# tool history
+.cc-history/
