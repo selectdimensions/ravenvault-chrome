@@ -1,6 +1,8 @@
 name: poe2obsidian
+title: Poe2Obsidian
 base: core24
 version: '0.11.0'
+contact: https://github.com/selectdimensions/ravenvault-chrome/issues
 icon: snap/local/poe2obsidian.png
 website: https://github.com/selectdimensions/ravenvault-chrome
 source-code: https://github.com/selectdimensions/ravenvault-chrome
