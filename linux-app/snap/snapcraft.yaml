@@ -1,6 +1,11 @@
 name: poe2obsidian
 base: core24
 version: '0.11.0'
+icon: snap/local/poe2obsidian.png
+website: https://github.com/selectdimensions/ravenvault-chrome
+source-code: https://github.com/selectdimensions/ravenvault-chrome
+issues: https://github.com/selectdimensions/ravenvault-chrome/issues
+license: MIT
 summary: Export your Poe.com chats to Obsidian as Markdown
 description: |
   Poe2Obsidian is the local companion app for the Poe2Obsidian browser
