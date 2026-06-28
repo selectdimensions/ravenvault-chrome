@@ -33,6 +33,8 @@ pub struct MemPalaceConfig {
     /// Override the palace location; `None` uses MemPalace's own default
     /// (`~/.mempalace`).
     pub palace: Option<PathBuf>,
+    /// Optional MemPalace "wing" to mine into; `None` uses the default wing.
+    pub wing: Option<String>,
 }
 
 impl Default for MemPalaceConfig {
@@ -43,6 +45,7 @@ impl Default for MemPalaceConfig {
             mode: "convos".to_string(),
             agent: "ravenvault".to_string(),
             palace: None,
+            wing: None,
         }
     }
 }
@@ -80,6 +83,10 @@ impl MemPalaceConfig {
         args.push(self.mode.clone());
         args.push("--agent".to_string());
         args.push(self.agent.clone());
+        if let Some(w) = &self.wing {
+            args.push("--wing".to_string());
+            args.push(w.clone());
+        }
         args
     }
 }
@@ -175,6 +182,25 @@ mod tests {
         assert_eq!(args[0], "--palace");
         assert_eq!(args[1], "/custom/palace");
         assert_eq!(args[2], "mine");
+    }
+
+    #[test]
+    fn mine_args_with_wing_appends_flag() {
+        let cfg = MemPalaceConfig {
+            enabled: true,
+            wing: Some("research".to_string()),
+            ..Default::default()
+        };
+        let args = cfg.mine_args(Path::new("/vault"));
+        let pos = args.iter().position(|a| a == "--wing").expect("--wing");
+        assert_eq!(args[pos + 1], "research");
+        // Default (no wing) carries no --wing flag.
+        let plain = MemPalaceConfig {
+            enabled: true,
+            ..Default::default()
+        }
+        .mine_args(Path::new("/vault"));
+        assert!(!plain.iter().any(|a| a == "--wing"));
     }
 
     #[tokio::test]

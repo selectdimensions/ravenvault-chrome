@@ -12,8 +12,10 @@ pub mod context;
 pub mod export;
 pub mod html2md;
 pub mod manifest;
+pub mod mcp;
 pub mod mempalace;
 pub mod protocol;
+pub mod relate;
 pub mod server;
 pub mod vault;
 
