@@ -15,9 +15,11 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use tracing::{debug, info, warn};
 
-/// How long to allow a mine to run before giving up. Manual mines of a large
-/// vault (especially the first one) can take a while.
-const MINE_TIMEOUT: Duration = Duration::from_secs(3600);
+/// How long to allow a mine to run before giving up. The first full mine of a
+/// large vault into an already-big palace can take several hours (embedding
+/// thousands of conversations), so this is generous; it exists only to bound a
+/// genuinely hung process, not to cap legitimate work.
+const MINE_TIMEOUT: Duration = Duration::from_secs(6 * 3600);
 
 /// Configuration for the MemPalace integration.
 #[derive(Debug, Clone)]
